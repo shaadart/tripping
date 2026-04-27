@@ -1,0 +1,10 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          # Queries are written against tables directly; the generated
+          # "manager" API would be unused code.
+          generate_manager: false
+          sql:
+            dialect: sqlite

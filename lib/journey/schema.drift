@@ -1,0 +1,45 @@
+import 'journey.dart';
+
+-- One recorded outing. `id` is the compact local key that track points
+-- reference; `uuid` is the identity used across devices and in exports.
+CREATE TABLE journeys (
+  id INTEGER NOT NULL PRIMARY KEY,
+  uuid TEXT NOT NULL UNIQUE,
+  mode ENUMNAME(JourneyMode) NOT NULL,
+  status ENUMNAME(JourneyStatus) NOT NULL,
+  created_at INTEGER NOT NULL MAPPED BY `const UtcMillis()`,
+  ended_at INTEGER MAPPED BY `const UtcMillis()`
+) AS JourneyRow;
+
+-- At most one journey is active (recording or paused) on a device.
+CREATE UNIQUE INDEX one_active_journey
+  ON journeys (status IN ('recording', 'paused'))
+  WHERE status IN ('recording', 'paused');
+
+-- A continuous stretch of recording. Pausing or an interruption closes the
+-- open segment; resuming opens the next one. Distance is never measured
+-- across a segment boundary because nothing is known about the gap.
+CREATE TABLE segments (
+  journey_id INTEGER NOT NULL REFERENCES journeys (id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  started_at INTEGER NOT NULL MAPPED BY `const UtcMillis()`,
+  ended_at INTEGER MAPPED BY `const UtcMillis()`,
+  end_reason ENUMNAME(SegmentEnd),
+  PRIMARY KEY (journey_id, seq)
+) AS SegmentRow;
+
+-- Keyed by fix time, so re-delivering the same fix is a harmless no-op and
+-- rows are physically ordered for range reads.
+CREATE TABLE track_points (
+  journey_id INTEGER NOT NULL REFERENCES journeys (id) ON DELETE CASCADE,
+  time INTEGER NOT NULL MAPPED BY `const UtcMillis()`,
+  segment INTEGER NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  accuracy REAL,
+  altitude REAL,
+  altitude_accuracy REAL,
+  speed REAL,
+  heading REAL,
+  PRIMARY KEY (journey_id, time)
+) WITHOUT ROWID AS TrackPointRow;
