@@ -1,7 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Recording while Tripping is open. Background recording arrives in R5. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <application
         android:label="Tripping"
-        android:name="${applicationName}"
+        android:name=".TrippingApplication"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

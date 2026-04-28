@@ -37,6 +37,8 @@ dependencies:
   uuid: ^4.6.0
   drift: ^2.34.4
   sqlite3: ^3.5.2
+  geolocator: ^14.1.2
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

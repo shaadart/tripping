@@ -1395,7 +1395,7 @@ abstract class _$JourneyStore extends GeneratedDatabase {
   late final Journeys journeys = Journeys(this);
   late final Index oneActiveJourney = Index(
     'one_active_journey',
-    'CREATE UNIQUE INDEX one_active_journey ON journeys (status IN (\'recording\', \'paused\')) WHERE status IN (\'recording\', \'paused\')',
+    'CREATE UNIQUE INDEX IF NOT EXISTS one_active_journey ON journeys (status IN (\'recording\', \'paused\')) WHERE status IN (\'recording\', \'paused\')',
   );
   late final Segments segments = Segments(this);
   late final TrackPoints trackPoints = TrackPoints(this);

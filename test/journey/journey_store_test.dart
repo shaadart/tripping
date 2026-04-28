@@ -285,6 +285,24 @@ void main() {
     });
   });
 
+  test('creating the schema again over an existing one succeeds', () async {
+    // What a second opener racing the first sees: the schema is there but
+    // the version is not yet set, so it runs the creation again. Found on a
+    // Pixel 9a when a relaunch started a second engine (E-009).
+    final dir = await Directory.systemTemp.createTemp('tripping_race_');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/journeys.sqlite');
+    final first = JourneyStore.file(file);
+    await first.allJourneys();
+    await first.customStatement('PRAGMA user_version = 0');
+    await first.close();
+
+    final second = JourneyStore.file(file);
+    addTearDown(second.close);
+
+    expect(await second.allJourneys(), isEmpty);
+  });
+
   test(
     'every fix reported as stored survives the process being killed',
     () async {

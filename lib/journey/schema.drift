@@ -12,7 +12,7 @@ CREATE TABLE journeys (
 ) AS JourneyRow;
 
 -- At most one journey is active (recording or paused) on a device.
-CREATE UNIQUE INDEX one_active_journey
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_journey
   ON journeys (status IN ('recording', 'paused'))
   WHERE status IN ('recording', 'paused');
 
