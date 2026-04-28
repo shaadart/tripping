@@ -23,12 +23,16 @@ class RecordScreen extends StatefulWidget {
     required this.recorder,
     required this.location,
     required this.system,
+    required this.mapBuilder,
     this.clock = _utcNow,
   });
 
   final Recorder recorder;
   final LocationSource location;
   final SystemAccess system;
+
+  /// Builds the map behind the panel; injected so tests need no platform map.
+  final Widget Function(RecorderState state, DateTime now) mapBuilder;
   final DateTime Function() clock;
 
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -185,57 +189,96 @@ class _RecordScreenState extends State<RecordScreen>
   Widget build(BuildContext context) {
     final now = widget.clock();
     final state = _state;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, viewport) => SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: viewport.maxHeight - 40),
-              child: IntrinsicHeight(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Header(state: state),
-                    const Spacer(),
-                    switch (state) {
-                      Idle() => const _Welcome(),
-                      Recording(:final progress) ||
-                      Paused(:final progress) ||
-                      Interrupted(
-                        :final progress,
-                      ) => _Readout(progress: progress, now: now),
-                    },
-                    const SizedBox(height: 24),
-                    _StatusLine(
-                      state: state,
-                      now: now,
-                      exits: _exits,
-                      onOpenLocationSettings: () => widget.location
-                          .openSettingsFor(LocationAccess.serviceOff),
-                      onOpenAppSettings: widget.system.openAppSettings,
-                    ),
-                    _SystemNotes(
-                      state: state,
-                      restricted: _restricted,
-                      notificationsShown: _notificationsShown,
-                      onOpenAppSettings: widget.system.openAppSettings,
-                    ),
-                    const Spacer(),
-                    if (_refused case final problem?)
-                      _AccessProblem(
-                        problem: problem,
-                        onRetry: _retry == null ? null : () => _askFor(_retry!),
-                        onOpenSettings: () =>
-                            widget.location.openSettingsFor(problem),
+      body: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(child: widget.mapBuilder(state, now)),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: scheme.surface.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          child: _Header(state: state),
+                        ),
                       ),
-                    ..._actions(state),
-                  ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // The panel holds everything that is not the map. It scrolls rather
+          // than overflow when the text is large.
+          Material(
+            color: scheme.surface,
+            child: SafeArea(
+              top: false,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.6,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      switch (state) {
+                        Idle() => const _Welcome(),
+                        Recording(:final progress) ||
+                        Paused(:final progress) ||
+                        Interrupted(
+                          :final progress,
+                        ) => _Readout(progress: progress, now: now),
+                      },
+                      const SizedBox(height: 12),
+                      _StatusLine(
+                        state: state,
+                        now: now,
+                        exits: _exits,
+                        onOpenLocationSettings: () => widget.location
+                            .openSettingsFor(LocationAccess.serviceOff),
+                        onOpenAppSettings: widget.system.openAppSettings,
+                      ),
+                      _SystemNotes(
+                        state: state,
+                        restricted: _restricted,
+                        notificationsShown: _notificationsShown,
+                        onOpenAppSettings: widget.system.openAppSettings,
+                      ),
+                      const SizedBox(height: 12),
+                      if (_refused case final problem?)
+                        _AccessProblem(
+                          problem: problem,
+                          onRetry: _retry == null
+                              ? null
+                              : () => _askFor(_retry!),
+                          onOpenSettings: () =>
+                              widget.location.openSettingsFor(problem),
+                        ),
+                      ..._actions(state),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -339,7 +382,7 @@ class _Welcome extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Where to?', style: text.displaySmall),
+        Text('Where to?', style: text.headlineMedium),
         const SizedBox(height: 12),
         Text(
           'Record a road journey or an expedition. Everything stays on this '
@@ -361,36 +404,25 @@ class _Readout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    const tabular = [FontFeature.tabularFigures()];
-    final elapsed = _duration(progress.elapsedAt(now));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(
-          elapsed,
-          semanticsLabel: 'Recording time $elapsed',
-          style: text.displayLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-            fontFeatures: tabular,
+        Expanded(
+          child: _Figure(
+            value: _duration(progress.elapsedAt(now)),
+            label: 'Time',
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _Figure(
-                value: _kilometres(progress.meters),
-                label: 'Distance',
-              ),
-            ),
-            Expanded(
-              child: _Figure(
-                value: _duration(progress.movingTime),
-                label: 'Moving',
-              ),
-            ),
-          ],
+        Expanded(
+          child: _Figure(
+            value: _kilometres(progress.meters),
+            label: 'Distance',
+          ),
+        ),
+        Expanded(
+          child: _Figure(
+            value: _duration(progress.movingTime),
+            label: 'Moving',
+          ),
         ),
       ],
     );

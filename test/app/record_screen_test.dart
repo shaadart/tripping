@@ -47,6 +47,7 @@ void main() {
           recorder: recorder,
           location: location,
           system: system,
+          mapBuilder: (_, _) => const SizedBox.expand(),
           clock: () => now,
         ),
       ),

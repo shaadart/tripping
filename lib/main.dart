@@ -8,6 +8,7 @@ import 'app/record_screen.dart';
 import 'app/system_access.dart';
 import 'app/theme.dart';
 import 'journey/journey_store.dart';
+import 'map/journey_map.dart';
 import 'recording/geolocator_location.dart';
 import 'recording/location_source.dart';
 import 'recording/raw_fix_log.dart';
@@ -33,6 +34,8 @@ Future<Widget> _openHome() async {
       recorder: recorder,
       location: location,
       system: const ChannelSystemAccess(),
+      mapBuilder: (state, now) =>
+          JourneyMap(state: state, store: store, now: now),
     );
   } catch (error) {
     return StartupFailure(error: error);
