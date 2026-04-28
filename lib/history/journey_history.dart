@@ -69,7 +69,12 @@ class JourneyHistory {
         mode: past.journey.mode,
         startedAt: past.journey.createdAt,
         track: await _store.track(past.journey.id),
+        waypoints: await _store.waypointsOf(past.journey.id),
       );
+
+  /// The journey's waypoints in the order they were made.
+  Future<List<WaypointRow>> waypointsOf(int journeyId) =>
+      _store.waypointsOf(journeyId);
 
   Future<PastJourney> _summaryOf(JourneyRow row) async {
     if (row.summaryVersion == summaryVersion) {

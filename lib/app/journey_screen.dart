@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../history/journey_history.dart';
 import '../journey/journey.dart';
 import 'figure.dart';
+import '../journey/journey_store.dart';
+import '../map/track_geometry.dart';
 import 'format.dart';
 
 /// One past journey: its track on the map and its numbers. Pops `true` when
@@ -20,7 +22,8 @@ class JourneyScreen extends StatefulWidget {
   final JourneyHistory history;
 
   /// Builds the map; the track is null while it loads.
-  final Widget Function(List<List<Fix>>? track) trackMapBuilder;
+  final Widget Function(List<List<Fix>>? track, List<WaypointRow> waypoints)
+  trackMapBuilder;
 
   /// Hands the journey to other apps as GPX.
   final Future<void> Function(PastJourney past)? onExport;
@@ -30,9 +33,10 @@ class JourneyScreen extends StatefulWidget {
 }
 
 class _JourneyScreenState extends State<JourneyScreen> {
-  late final Future<List<List<Fix>>> _track = widget.history.trackOf(
-    widget.past.journey.id,
-  );
+  late final Future<(List<List<Fix>>, List<WaypointRow>)> _loaded = (
+    widget.history.trackOf(widget.past.journey.id),
+    widget.history.waypointsOf(widget.past.journey.id),
+  ).wait;
 
   Future<void> _export(Future<void> Function(PastJourney) export) async {
     try {
@@ -98,7 +102,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
         children: [
           Expanded(
             child: FutureBuilder(
-              future: _track,
+              future: _loaded,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
@@ -106,7 +110,9 @@ class _JourneyScreenState extends State<JourneyScreen> {
                   );
                 }
                 // Built at once, so the map loads while the track does.
-                return widget.trackMapBuilder(snapshot.data);
+                final (track, waypoints) =
+                    snapshot.data ?? (null, const <WaypointRow>[]);
+                return widget.trackMapBuilder(track, waypoints);
               },
             ),
           ),
@@ -114,62 +120,145 @@ class _JourneyScreenState extends State<JourneyScreen> {
             color: scheme.surface,
             child: SafeArea(
               top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Figure(
-                            value: clockTime(past.recordedTime),
-                            label: 'Time',
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Figure(
+                              value: clockTime(past.recordedTime),
+                              label: 'Time',
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Figure(
-                            value: kilometres(past.meters),
-                            label: 'Distance',
+                          Expanded(
+                            child: Figure(
+                              value: kilometres(past.meters),
+                              label: 'Distance',
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Figure(
-                            value: clockTime(past.movingTime),
-                            label: 'Moving',
+                          Expanded(
+                            child: Figure(
+                              value: clockTime(past.movingTime),
+                              label: 'Moving',
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      [
-                        modeName(journey.mode),
-                        if (journey.endedAt case final ended?)
-                          'ended ${timeOfDay(context, ended)}',
-                      ].join(' · '),
-                      style: text.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                        ],
                       ),
-                    ),
-                    if (parts > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          'Recorded in $parts parts. Nothing is known between '
-                          'them, so they are not joined or counted.',
-                          style: text.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                      const SizedBox(height: 12),
+                      Text(
+                        [
+                          modeName(journey.mode),
+                          if (journey.endedAt case final ended?)
+                            'ended ${timeOfDay(context, ended)}',
+                        ].join(' · '),
+                        style: text.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
-                  ],
+                      if (parts > 1)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Recorded in $parts parts. Nothing is known between '
+                            'them, so they are not joined or counted.',
+                            style: text.bodyMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      FutureBuilder(
+                        future: _loaded,
+                        builder: (context, snapshot) => _Waypoints(
+                          waypoints: snapshot.data?.$2 ?? const [],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The journey's waypoints, numbered as on the map.
+class _Waypoints extends StatelessWidget {
+  const _Waypoints({required this.waypoints});
+
+  final List<WaypointRow> waypoints;
+
+  @override
+  Widget build(BuildContext context) {
+    if (waypoints.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        Text('Waypoints', style: text.titleMedium),
+        for (final (i, waypoint) in waypoints.indexed)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  waypoint.kind == WaypointKind.marked
+                      ? Icons.flag
+                      : Icons.outlined_flag,
+                  size: 20,
+                  color: waypoint.kind == WaypointKind.marked
+                      ? scheme.tertiary
+                      : scheme.secondary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        waypoint.name ??
+                            'Waypoint ${waypointLabel(waypoint, i)}',
+                        style: text.bodyLarge,
+                      ),
+                      Text(
+                        [
+                          switch (waypoint.kind) {
+                            WaypointKind.marked =>
+                              'Marked ${timeOfDay(context, waypoint.fixTime ?? waypoint.createdAt)}',
+                            WaypointKind.planned => 'Planned',
+                          },
+                          coordinatesText(
+                            waypoint.latitude,
+                            waypoint.longitude,
+                          ),
+                          if (waypoint.accuracy case final accuracy?)
+                            '±${accuracy.round()} m',
+                        ].join(' · '),
+                        style: text.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (waypoint.note case final note?)
+                        Text(note, style: text.bodyMedium),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

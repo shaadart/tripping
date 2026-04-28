@@ -41,6 +41,18 @@ const _schemaV1 = [
     PRIMARY KEY (journey_id, time)) WITHOUT ROWID''',
 ];
 
+/// Schema v2 as shipped in `68d141f`, frozen: v1 plus the summary columns.
+final _schemaV2 = [
+  ..._schemaV1,
+  'ALTER TABLE journeys ADD COLUMN summary_version INTEGER',
+  'ALTER TABLE journeys ADD COLUMN meters REAL',
+  'ALTER TABLE journeys ADD COLUMN moving_ms INTEGER',
+  'ALTER TABLE journeys ADD COLUMN recorded_ms INTEGER',
+  'ALTER TABLE journeys ADD COLUMN outline TEXT',
+];
+
+const _tables = ['journeys', 'segments', 'track_points', 'waypoints'];
+
 final _t0 = DateTime.utc(2026, 10, 27, 6, 30).millisecondsSinceEpoch;
 
 List<String> columnsOf(Database db, String table) => [
@@ -55,85 +67,137 @@ void main() {
   setUp(() => dir = Directory.systemTemp.createTempSync('tripping_migration'));
   tearDown(() => dir.deleteSync(recursive: true));
 
-  test(
-    'a v1 database upgrades to v2 with every journey and fix intact',
-    () async {
-      final file = File('${dir.path}/journeys.sqlite');
-      final v1 = sqlite3.open(file.path);
-      for (final statement in _schemaV1) {
-        v1.execute(statement);
-      }
-      v1
-        ..execute('PRAGMA user_version = 1')
-        ..execute(
-          "INSERT INTO journeys VALUES (1, 'u-1', 'expedition', 'ended', ?, ?)",
-          [_t0, _t0 + 60000],
-        )
-        ..execute(
-          "INSERT INTO journeys VALUES (2, 'u-2', 'road', 'recording', ?, NULL)",
-          [_t0 + 120000],
-        )
-        ..execute("INSERT INTO segments VALUES (1, 0, ?, ?, 'ended')", [
-          _t0,
-          _t0 + 60000,
-        ])
-        ..execute('INSERT INTO segments VALUES (2, 0, ?, NULL, NULL)', [
-          _t0 + 120000,
-        ]);
-      for (var second = 0; second < 60; second++) {
-        v1.execute(
-          'INSERT INTO track_points (journey_id, time, segment, latitude, '
-          'longitude, accuracy) VALUES (1, ?, 0, ?, 77.19, 4)',
-          [_t0 + second * 1000, 32.24 + second * 1e-5],
-        );
-      }
-      v1.close();
-
-      final store = JourneyStore.file(file);
-      final ended = await store.endedJourneys();
-      expect(ended.single.uuid, 'u-1');
-      expect(ended.single.summaryVersion, isNull);
-      expect(ended.single.meters, isNull);
-      expect((await store.track(1)).single, hasLength(60));
-      expect((await store.activeJourney())?.uuid, 'u-2');
-
-      await store.saveSummary(
-        1,
-        version: 1,
-        meters: 66.7,
-        movingTime: const Duration(seconds: 50),
-        recordedTime: const Duration(minutes: 1),
-        outline: '[]',
+  test('a v1 database upgrades with every journey and fix intact', () async {
+    final file = File('${dir.path}/journeys.sqlite');
+    final v1 = sqlite3.open(file.path);
+    for (final statement in _schemaV1) {
+      v1.execute(statement);
+    }
+    v1
+      ..execute('PRAGMA user_version = 1')
+      ..execute(
+        "INSERT INTO journeys VALUES (1, 'u-1', 'expedition', 'ended', ?, ?)",
+        [_t0, _t0 + 60000],
+      )
+      ..execute(
+        "INSERT INTO journeys VALUES (2, 'u-2', 'road', 'recording', ?, NULL)",
+        [_t0 + 120000],
+      )
+      ..execute("INSERT INTO segments VALUES (1, 0, ?, ?, 'ended')", [
+        _t0,
+        _t0 + 60000,
+      ])
+      ..execute('INSERT INTO segments VALUES (2, 0, ?, NULL, NULL)', [
+        _t0 + 120000,
+      ]);
+    for (var second = 0; second < 60; second++) {
+      v1.execute(
+        'INSERT INTO track_points (journey_id, time, segment, latitude, '
+        'longitude, accuracy) VALUES (1, ?, 0, ?, 77.19, 4)',
+        [_t0 + second * 1000, 32.24 + second * 1e-5],
       );
-      final summarised = (await store.endedJourneys()).single;
-      expect(summarised.meters, 66.7);
-      expect(summarised.movingMs, 50000);
-      expect(summarised.recordedMs, 60000);
-      await store.close();
+    }
+    v1.close();
 
-      // The upgraded table is exactly what a fresh install creates.
-      final fresh = JourneyStore.file(File('${dir.path}/fresh.sqlite'));
-      await fresh.activeJourney();
-      await fresh.close();
-      final upgraded = sqlite3.open(file.path);
-      final created = sqlite3.open('${dir.path}/fresh.sqlite');
-      expect(upgraded.select('PRAGMA user_version').single.values.single, 2);
-      for (final table in ['journeys', 'segments', 'track_points']) {
-        expect(columnsOf(upgraded, table), columnsOf(created, table));
-      }
-      upgraded.close();
-      created.close();
-    },
-  );
+    final store = JourneyStore.file(file);
+    final ended = await store.endedJourneys();
+    expect(ended.single.uuid, 'u-1');
+    expect(ended.single.summaryVersion, isNull);
+    expect(ended.single.meters, isNull);
+    expect((await store.track(1)).single, hasLength(60));
+    expect((await store.activeJourney())?.uuid, 'u-2');
 
-  test('a fresh database starts at v2', () async {
+    await store.saveSummary(
+      1,
+      version: 1,
+      meters: 66.7,
+      movingTime: const Duration(seconds: 50),
+      recordedTime: const Duration(minutes: 1),
+      outline: '[]',
+    );
+    final summarised = (await store.endedJourneys()).single;
+    expect(summarised.meters, 66.7);
+    expect(summarised.movingMs, 50000);
+    expect(summarised.recordedMs, 60000);
+    await store.close();
+
+    // The upgraded table is exactly what a fresh install creates.
+    final fresh = JourneyStore.file(File('${dir.path}/fresh.sqlite'));
+    await fresh.activeJourney();
+    await fresh.close();
+    final upgraded = sqlite3.open(file.path);
+    final created = sqlite3.open('${dir.path}/fresh.sqlite');
+    expect(upgraded.select('PRAGMA user_version').single.values.single, 3);
+    for (final table in _tables) {
+      expect(columnsOf(upgraded, table), columnsOf(created, table));
+    }
+    upgraded.close();
+    created.close();
+  });
+
+  test('a v2 database upgrades to v3 with summaries kept, ready for '
+      'waypoints', () async {
+    final file = File('${dir.path}/journeys.sqlite');
+    final v2 = sqlite3.open(file.path);
+    for (final statement in _schemaV2) {
+      v2.execute(statement);
+    }
+    v2
+      ..execute('PRAGMA user_version = 2')
+      ..execute(
+        "INSERT INTO journeys VALUES (1, 'u-1', 'expedition', 'ended', ?, ?, "
+        "1, 123.4, 50000, 60000, '[]')",
+        [_t0, _t0 + 60000],
+      )
+      ..execute("INSERT INTO segments VALUES (1, 0, ?, ?, 'ended')", [
+        _t0,
+        _t0 + 60000,
+      ])
+      ..close();
+
+    final store = JourneyStore.file(file);
+    final ended = (await store.endedJourneys()).single;
+    expect(ended.meters, 123.4);
+    expect(ended.summaryVersion, 1);
+    final waypoint = await store.addWaypoint(
+      1,
+      kind: WaypointKind.planned,
+      at: DateTime.fromMillisecondsSinceEpoch(_t0, isUtc: true),
+      latitude: 32.25,
+      longitude: 77.19,
+      name: 'Camp',
+    );
+    expect((await store.waypointsOf(1)).single, waypoint);
+    await store.close();
+
+    final fresh = JourneyStore.file(File('${dir.path}/fresh.sqlite'));
+    await fresh.activeJourney();
+    await fresh.close();
+    final upgraded = sqlite3.open(file.path);
+    final created = sqlite3.open('${dir.path}/fresh.sqlite');
+    expect(upgraded.select('PRAGMA user_version').single.values.single, 3);
+    for (final table in _tables) {
+      expect(columnsOf(upgraded, table), columnsOf(created, table));
+    }
+    expect(
+      upgraded.select(
+        "SELECT name FROM sqlite_master WHERE type = 'index' "
+        "AND name = 'waypoints_by_journey'",
+      ),
+      hasLength(1),
+    );
+    upgraded.close();
+    created.close();
+  });
+
+  test('a fresh database starts at v3', () async {
     final store = JourneyStore(NativeDatabase.memory());
     final journey = await store.startJourney(
       JourneyMode.expedition,
       at: DateTime.utc(2026),
     );
     expect(journey.summaryVersion, isNull);
-    expect(store.schemaVersion, 2);
+    expect(store.schemaVersion, 3);
     await store.close();
   });
 }

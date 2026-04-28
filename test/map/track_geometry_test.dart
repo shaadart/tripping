@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tripping/journey/journey.dart';
+import 'package:tripping/journey/journey_store.dart';
 import 'package:tripping/map/track_geometry.dart';
 
 import '../support/fakes.dart';
@@ -127,6 +128,33 @@ void main() {
         hasLength(1),
       );
     });
+  });
+
+  test('waypoints carry their kind and a label: name, else number', () {
+    WaypointRow waypoint(int id, WaypointKind kind, {String? name}) =>
+        WaypointRow(
+          id: id,
+          journeyId: 1,
+          kind: kind,
+          createdAt: t0,
+          latitude: 32,
+          longitude: 77 + id / 1000,
+          name: name,
+        );
+    final features =
+        waypointFeatures([
+              waypoint(1, WaypointKind.marked, name: 'Spring'),
+              waypoint(2, WaypointKind.planned),
+            ])['features']!
+            as List;
+    final properties = [
+      for (final feature in features) (feature as Map)['properties'],
+    ];
+    expect(properties, [
+      {'kind': 'marked', 'label': 'Spring'},
+      {'kind': 'planned', 'label': '2'},
+    ]);
+    expect(coordinatesOf({'features': features}).last, [77.002, 32]);
   });
 
   group('TrackBuffer', () {

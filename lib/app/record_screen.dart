@@ -12,6 +12,7 @@ import 'figure.dart';
 import 'format.dart';
 import 'system_access.dart';
 import 'theme.dart';
+import 'waypoint_sheet.dart';
 
 /// Seconds without a fix before the screen says so.
 const _quietAfter = Duration(seconds: 15);
@@ -31,6 +32,7 @@ class RecordScreen extends StatefulWidget {
     required this.location,
     required this.system,
     required this.mapBuilder,
+    this.waypoints,
     this.historyBuilder,
     this.onToggleHighSun,
     this.clock = _utcNow,
@@ -42,6 +44,9 @@ class RecordScreen extends StatefulWidget {
 
   /// Builds the map behind the panel; injected so tests need no platform map.
   final Widget Function(RecorderState state, DateTime now) mapBuilder;
+
+  /// Where marked waypoints are kept; without it there is no Mark button.
+  final JourneyStore? waypoints;
 
   /// Builds the list of past journeys, opened from the idle screen.
   final WidgetBuilder? historyBuilder;
@@ -200,6 +205,36 @@ class _RecordScreenState extends State<RecordScreen>
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Saves where the phone is the moment the user asks, then offers to name
+  /// it. Says so when the newest fix is not a live one.
+  Future<void> _mark(Recording state) async {
+    final store = widget.waypoints;
+    final fix = state.latestFix;
+    final arrived = state.latestFixArrivedAt;
+    if (store == null || fix == null) return;
+    final now = widget.clock();
+    final waypoint = await store.addWaypoint(
+      state.journey.id,
+      kind: WaypointKind.marked,
+      at: now,
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      accuracy: fix.accuracy,
+      altitude: fix.altitude,
+      fixTime: fix.time,
+    );
+    final quiet = arrived == null ? null : now.difference(arrived);
+    if (!mounted) return;
+    await showWaypointSheet(
+      context,
+      store: store,
+      waypoint: waypoint,
+      warning: quiet != null && quiet > _quietAfter
+          ? 'Marked at the last position known, ${age(quiet)} ago.'
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = widget.clock();
@@ -212,6 +247,19 @@ class _RecordScreenState extends State<RecordScreen>
             child: Stack(
               children: [
                 Positioned.fill(child: widget.mapBuilder(state, now)),
+                if (widget.waypoints != null && state is Recording)
+                  Positioned(
+                    left: 16,
+                    bottom: 16,
+                    child: FloatingActionButton.extended(
+                      heroTag: null,
+                      onPressed: state.latestFix == null
+                          ? null
+                          : () => _mark(state),
+                      icon: const Icon(Icons.flag_outlined),
+                      label: const Text('Mark'),
+                    ),
+                  ),
                 Positioned(
                   top: 0,
                   left: 0,

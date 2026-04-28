@@ -10,6 +10,7 @@ import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
+import '../app/waypoint_sheet.dart';
 import 'map_style.dart';
 import 'track_geometry.dart';
 
@@ -70,6 +71,7 @@ class _JourneyMapState extends State<JourneyMap> {
   static const _historySource = 'track-history';
   static const _tailSource = 'track-tail';
   static const _positionSource = 'position';
+  static const _waypointSource = 'waypoints';
 
   MapLibreMapController? _map;
   bool _styleReady = false;
@@ -83,6 +85,7 @@ class _JourneyMapState extends State<JourneyMap> {
   bool _zoomedIn = false;
   Offset? _touchStart;
   bool _blank = false;
+  StreamSubscription<List<WaypointRow>>? _waypointWatch;
   JourneyMode _mode = JourneyMode.expedition;
 
   /// The road camera's heading, kept while the GPS heading is unreliable.
@@ -108,6 +111,7 @@ class _JourneyMapState extends State<JourneyMap> {
     _serially(() async {
       final map = _map!;
       final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
+      final stale = warningColor(context).toHexStringRGB();
       final line = trackLine(context);
       for (final source in [_historySource, _tailSource, _positionSource]) {
         await map.addGeoJsonSource(source, trackFeatures(const []));
@@ -115,6 +119,10 @@ class _JourneyMapState extends State<JourneyMap> {
       for (final source in [_historySource, _tailSource]) {
         await map.addLineLayer(source, '$source-line', line);
       }
+      // Waypoints above the track, below the position.
+      await map.addGeoJsonSource(_waypointSource, waypointFeatures(const []));
+      if (!mounted) return;
+      await addWaypointLayers(map, context, _waypointSource);
       await map.addCircleLayer(
         _positionSource,
         'accuracy',
@@ -142,7 +150,7 @@ class _JourneyMapState extends State<JourneyMap> {
           circleStrokeColor: [
             'case',
             ['get', 'stale'],
-            Palette.signal.toHexStringRGB(),
+            stale,
             '#FFFFFF',
           ],
           circleStrokeWidth: 3,
@@ -168,6 +176,7 @@ class _JourneyMapState extends State<JourneyMap> {
 
     if (journey?.id != _journeyId) {
       _journeyId = journey?.id;
+      _watchWaypoints(map, journey?.id);
       _track.reset(
         journey == null ? const [] : await widget.store.track(journey.id),
       );
@@ -334,6 +343,59 @@ class _JourneyMapState extends State<JourneyMap> {
     if (mounted && blank != _blank) setState(() => _blank = blank);
   }
 
+  /// Keeps the waypoint layer in step with the store for [journeyId].
+  void _watchWaypoints(MapLibreMapController map, int? journeyId) {
+    _waypointWatch?.cancel();
+    _waypointWatch = null;
+    if (journeyId == null) {
+      _serially(
+        () => map.setGeoJsonSource(_waypointSource, waypointFeatures(const [])),
+      );
+      return;
+    }
+    _waypointWatch = widget.store
+        .watchWaypoints(journeyId)
+        .listen(
+          (waypoints) => _serially(
+            () => map.setGeoJsonSource(
+              _waypointSource,
+              waypointFeatures(waypoints),
+            ),
+          ),
+        );
+  }
+
+  /// A long press plans a point there, on the journey under way.
+  Future<void> _plan(LatLng at) async {
+    final journey = switch (widget.state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey,
+      Idle() => null,
+    };
+    if (journey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Start a journey to plan points on it')),
+      );
+      return;
+    }
+    final waypoint = await widget.store.addWaypoint(
+      journey.id,
+      kind: WaypointKind.planned,
+      at: widget.now,
+      latitude: at.latitude,
+      longitude: at.longitude,
+    );
+    if (!mounted) return;
+    await showWaypointSheet(context, store: widget.store, waypoint: waypoint);
+  }
+
+  @override
+  void dispose() {
+    _waypointWatch?.cancel();
+    super.dispose();
+  }
+
   /// Back to the journey's follow view.
   void _recenter() {
     setState(() => _follow = true);
@@ -368,6 +430,7 @@ class _JourneyMapState extends State<JourneyMap> {
             ),
             onMapCreated: (map) => _map = map,
             onStyleLoadedCallback: _onStyleLoaded,
+            onMapLongClick: (_, at) => _plan(at),
             // Below the status bar, level with the header (the road view
             // turns, so the compass shows where north is).
             compassViewPosition: CompassViewPosition.topRight,
@@ -383,7 +446,8 @@ class _JourneyMapState extends State<JourneyMap> {
           Positioned(
             left: 16,
             right: 16,
-            bottom: 16,
+            // Under the header, clear of the buttons at the bottom.
+            top: MediaQuery.paddingOf(context).top + 64,
             child: Center(child: _MapNote('Map not available here')),
           ),
         if (recording && !_follow && _shownFix != null)

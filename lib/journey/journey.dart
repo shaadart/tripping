@@ -23,6 +23,16 @@ enum SegmentEnd {
   interrupted,
 }
 
+/// Where a waypoint came from.
+enum WaypointKind {
+  /// The device's own position when the user marked it: carries the fix's
+  /// accuracy and time.
+  marked,
+
+  /// A place the user chose on the map. Nobody has been there yet.
+  planned,
+}
+
 /// One location fix as reported by the device. All times are UTC.
 class Fix {
   const Fix({
@@ -81,6 +91,12 @@ class Fix {
 
   @override
   String toString() => 'Fix($time, $latitude, $longitude, ±$accuracy m)';
+}
+
+/// Stores a [WaypointKind] by name, so reordering the enum never changes
+/// what stored waypoints mean.
+class WaypointKindByName extends EnumNameConverter<WaypointKind> {
+  const WaypointKindByName() : super(WaypointKind.values);
 }
 
 /// Stores instants as UTC milliseconds since the epoch.

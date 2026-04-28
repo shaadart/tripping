@@ -1655,6 +1655,653 @@ class TrackPointsCompanion extends UpdateCompanion<TrackPointRow> {
   }
 }
 
+class Waypoints extends Table with TableInfo<Waypoints, WaypointRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  Waypoints(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY',
+  );
+  static const VerificationMeta _journeyIdMeta = const VerificationMeta(
+    'journeyId',
+  );
+  late final GeneratedColumn<int> journeyId = GeneratedColumn<int>(
+    'journey_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES journeys(id)ON DELETE CASCADE',
+  );
+  late final GeneratedColumnWithTypeConverter<WaypointKind, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      ).withConverter<WaypointKind>(Waypoints.$converterkind);
+  late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
+      GeneratedColumn<int>(
+        'created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      ).withConverter<DateTime>(Waypoints.$convertercreatedAt);
+  static const VerificationMeta _latitudeMeta = const VerificationMeta(
+    'latitude',
+  );
+  late final GeneratedColumn<double> latitude = GeneratedColumn<double>(
+    'latitude',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  static const VerificationMeta _longitudeMeta = const VerificationMeta(
+    'longitude',
+  );
+  late final GeneratedColumn<double> longitude = GeneratedColumn<double>(
+    'longitude',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  static const VerificationMeta _accuracyMeta = const VerificationMeta(
+    'accuracy',
+  );
+  late final GeneratedColumn<double> accuracy = GeneratedColumn<double>(
+    'accuracy',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _altitudeMeta = const VerificationMeta(
+    'altitude',
+  );
+  late final GeneratedColumn<double> altitude = GeneratedColumn<double>(
+    'altitude',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  late final GeneratedColumnWithTypeConverter<DateTime?, int> fixTime =
+      GeneratedColumn<int>(
+        'fix_time',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        $customConstraints: '',
+      ).withConverter<DateTime?>(Waypoints.$converterfixTimen);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    journeyId,
+    kind,
+    createdAt,
+    latitude,
+    longitude,
+    accuracy,
+    altitude,
+    fixTime,
+    name,
+    note,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'waypoints';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WaypointRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('journey_id')) {
+      context.handle(
+        _journeyIdMeta,
+        journeyId.isAcceptableOrUnknown(data['journey_id']!, _journeyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_journeyIdMeta);
+    }
+    if (data.containsKey('latitude')) {
+      context.handle(
+        _latitudeMeta,
+        latitude.isAcceptableOrUnknown(data['latitude']!, _latitudeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latitudeMeta);
+    }
+    if (data.containsKey('longitude')) {
+      context.handle(
+        _longitudeMeta,
+        longitude.isAcceptableOrUnknown(data['longitude']!, _longitudeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_longitudeMeta);
+    }
+    if (data.containsKey('accuracy')) {
+      context.handle(
+        _accuracyMeta,
+        accuracy.isAcceptableOrUnknown(data['accuracy']!, _accuracyMeta),
+      );
+    }
+    if (data.containsKey('altitude')) {
+      context.handle(
+        _altitudeMeta,
+        altitude.isAcceptableOrUnknown(data['altitude']!, _altitudeMeta),
+      );
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WaypointRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WaypointRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      journeyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journey_id'],
+      )!,
+      kind: Waypoints.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
+      createdAt: Waypoints.$convertercreatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}created_at'],
+        )!,
+      ),
+      latitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}latitude'],
+      )!,
+      longitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}longitude'],
+      )!,
+      accuracy: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}accuracy'],
+      ),
+      altitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}altitude'],
+      ),
+      fixTime: Waypoints.$converterfixTimen.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}fix_time'],
+        ),
+      ),
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+    );
+  }
+
+  @override
+  Waypoints createAlias(String alias) {
+    return Waypoints(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<WaypointKind, String, String> $converterkind =
+      const WaypointKindByName();
+  static TypeConverter<DateTime, int> $convertercreatedAt = const UtcMillis();
+  static TypeConverter<DateTime, int> $converterfixTime = const UtcMillis();
+  static TypeConverter<DateTime?, int?> $converterfixTimen =
+      NullAwareTypeConverter.wrap($converterfixTime);
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class WaypointRow extends DataClass implements Insertable<WaypointRow> {
+  final int id;
+  final int journeyId;
+
+  /// Stored by name. Not ENUMNAME(WaypointKind): "WaypointKind" contains
+  /// "INT", which gives the column integer affinity, and the enum would be
+  /// stored by its index.
+  final WaypointKind kind;
+  final DateTime createdAt;
+  final double latitude;
+  final double longitude;
+
+  /// Marked waypoints only: the fix's accuracy, altitude and GPS time.
+  final double? accuracy;
+  final double? altitude;
+  final DateTime? fixTime;
+  final String? name;
+  final String? note;
+  const WaypointRow({
+    required this.id,
+    required this.journeyId,
+    required this.kind,
+    required this.createdAt,
+    required this.latitude,
+    required this.longitude,
+    this.accuracy,
+    this.altitude,
+    this.fixTime,
+    this.name,
+    this.note,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['journey_id'] = Variable<int>(journeyId);
+    {
+      map['kind'] = Variable<String>(Waypoints.$converterkind.toSql(kind));
+    }
+    {
+      map['created_at'] = Variable<int>(
+        Waypoints.$convertercreatedAt.toSql(createdAt),
+      );
+    }
+    map['latitude'] = Variable<double>(latitude);
+    map['longitude'] = Variable<double>(longitude);
+    if (!nullToAbsent || accuracy != null) {
+      map['accuracy'] = Variable<double>(accuracy);
+    }
+    if (!nullToAbsent || altitude != null) {
+      map['altitude'] = Variable<double>(altitude);
+    }
+    if (!nullToAbsent || fixTime != null) {
+      map['fix_time'] = Variable<int>(
+        Waypoints.$converterfixTimen.toSql(fixTime),
+      );
+    }
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    return map;
+  }
+
+  WaypointsCompanion toCompanion(bool nullToAbsent) {
+    return WaypointsCompanion(
+      id: Value(id),
+      journeyId: Value(journeyId),
+      kind: Value(kind),
+      createdAt: Value(createdAt),
+      latitude: Value(latitude),
+      longitude: Value(longitude),
+      accuracy: accuracy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accuracy),
+      altitude: altitude == null && nullToAbsent
+          ? const Value.absent()
+          : Value(altitude),
+      fixTime: fixTime == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fixTime),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+    );
+  }
+
+  factory WaypointRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WaypointRow(
+      id: serializer.fromJson<int>(json['id']),
+      journeyId: serializer.fromJson<int>(json['journey_id']),
+      kind: Waypoints.$converterkind.fromJson(
+        serializer.fromJson<String>(json['kind']),
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['created_at']),
+      latitude: serializer.fromJson<double>(json['latitude']),
+      longitude: serializer.fromJson<double>(json['longitude']),
+      accuracy: serializer.fromJson<double?>(json['accuracy']),
+      altitude: serializer.fromJson<double?>(json['altitude']),
+      fixTime: serializer.fromJson<DateTime?>(json['fix_time']),
+      name: serializer.fromJson<String?>(json['name']),
+      note: serializer.fromJson<String?>(json['note']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'journey_id': serializer.toJson<int>(journeyId),
+      'kind': serializer.toJson<String>(Waypoints.$converterkind.toJson(kind)),
+      'created_at': serializer.toJson<DateTime>(createdAt),
+      'latitude': serializer.toJson<double>(latitude),
+      'longitude': serializer.toJson<double>(longitude),
+      'accuracy': serializer.toJson<double?>(accuracy),
+      'altitude': serializer.toJson<double?>(altitude),
+      'fix_time': serializer.toJson<DateTime?>(fixTime),
+      'name': serializer.toJson<String?>(name),
+      'note': serializer.toJson<String?>(note),
+    };
+  }
+
+  WaypointRow copyWith({
+    int? id,
+    int? journeyId,
+    WaypointKind? kind,
+    DateTime? createdAt,
+    double? latitude,
+    double? longitude,
+    Value<double?> accuracy = const Value.absent(),
+    Value<double?> altitude = const Value.absent(),
+    Value<DateTime?> fixTime = const Value.absent(),
+    Value<String?> name = const Value.absent(),
+    Value<String?> note = const Value.absent(),
+  }) => WaypointRow(
+    id: id ?? this.id,
+    journeyId: journeyId ?? this.journeyId,
+    kind: kind ?? this.kind,
+    createdAt: createdAt ?? this.createdAt,
+    latitude: latitude ?? this.latitude,
+    longitude: longitude ?? this.longitude,
+    accuracy: accuracy.present ? accuracy.value : this.accuracy,
+    altitude: altitude.present ? altitude.value : this.altitude,
+    fixTime: fixTime.present ? fixTime.value : this.fixTime,
+    name: name.present ? name.value : this.name,
+    note: note.present ? note.value : this.note,
+  );
+  WaypointRow copyWithCompanion(WaypointsCompanion data) {
+    return WaypointRow(
+      id: data.id.present ? data.id.value : this.id,
+      journeyId: data.journeyId.present ? data.journeyId.value : this.journeyId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      latitude: data.latitude.present ? data.latitude.value : this.latitude,
+      longitude: data.longitude.present ? data.longitude.value : this.longitude,
+      accuracy: data.accuracy.present ? data.accuracy.value : this.accuracy,
+      altitude: data.altitude.present ? data.altitude.value : this.altitude,
+      fixTime: data.fixTime.present ? data.fixTime.value : this.fixTime,
+      name: data.name.present ? data.name.value : this.name,
+      note: data.note.present ? data.note.value : this.note,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WaypointRow(')
+          ..write('id: $id, ')
+          ..write('journeyId: $journeyId, ')
+          ..write('kind: $kind, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('accuracy: $accuracy, ')
+          ..write('altitude: $altitude, ')
+          ..write('fixTime: $fixTime, ')
+          ..write('name: $name, ')
+          ..write('note: $note')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    journeyId,
+    kind,
+    createdAt,
+    latitude,
+    longitude,
+    accuracy,
+    altitude,
+    fixTime,
+    name,
+    note,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WaypointRow &&
+          other.id == this.id &&
+          other.journeyId == this.journeyId &&
+          other.kind == this.kind &&
+          other.createdAt == this.createdAt &&
+          other.latitude == this.latitude &&
+          other.longitude == this.longitude &&
+          other.accuracy == this.accuracy &&
+          other.altitude == this.altitude &&
+          other.fixTime == this.fixTime &&
+          other.name == this.name &&
+          other.note == this.note);
+}
+
+class WaypointsCompanion extends UpdateCompanion<WaypointRow> {
+  final Value<int> id;
+  final Value<int> journeyId;
+  final Value<WaypointKind> kind;
+  final Value<DateTime> createdAt;
+  final Value<double> latitude;
+  final Value<double> longitude;
+  final Value<double?> accuracy;
+  final Value<double?> altitude;
+  final Value<DateTime?> fixTime;
+  final Value<String?> name;
+  final Value<String?> note;
+  const WaypointsCompanion({
+    this.id = const Value.absent(),
+    this.journeyId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.latitude = const Value.absent(),
+    this.longitude = const Value.absent(),
+    this.accuracy = const Value.absent(),
+    this.altitude = const Value.absent(),
+    this.fixTime = const Value.absent(),
+    this.name = const Value.absent(),
+    this.note = const Value.absent(),
+  });
+  WaypointsCompanion.insert({
+    this.id = const Value.absent(),
+    required int journeyId,
+    required WaypointKind kind,
+    required DateTime createdAt,
+    required double latitude,
+    required double longitude,
+    this.accuracy = const Value.absent(),
+    this.altitude = const Value.absent(),
+    this.fixTime = const Value.absent(),
+    this.name = const Value.absent(),
+    this.note = const Value.absent(),
+  }) : journeyId = Value(journeyId),
+       kind = Value(kind),
+       createdAt = Value(createdAt),
+       latitude = Value(latitude),
+       longitude = Value(longitude);
+  static Insertable<WaypointRow> custom({
+    Expression<int>? id,
+    Expression<int>? journeyId,
+    Expression<String>? kind,
+    Expression<int>? createdAt,
+    Expression<double>? latitude,
+    Expression<double>? longitude,
+    Expression<double>? accuracy,
+    Expression<double>? altitude,
+    Expression<int>? fixTime,
+    Expression<String>? name,
+    Expression<String>? note,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (journeyId != null) 'journey_id': journeyId,
+      if (kind != null) 'kind': kind,
+      if (createdAt != null) 'created_at': createdAt,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (accuracy != null) 'accuracy': accuracy,
+      if (altitude != null) 'altitude': altitude,
+      if (fixTime != null) 'fix_time': fixTime,
+      if (name != null) 'name': name,
+      if (note != null) 'note': note,
+    });
+  }
+
+  WaypointsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? journeyId,
+    Value<WaypointKind>? kind,
+    Value<DateTime>? createdAt,
+    Value<double>? latitude,
+    Value<double>? longitude,
+    Value<double?>? accuracy,
+    Value<double?>? altitude,
+    Value<DateTime?>? fixTime,
+    Value<String?>? name,
+    Value<String?>? note,
+  }) {
+    return WaypointsCompanion(
+      id: id ?? this.id,
+      journeyId: journeyId ?? this.journeyId,
+      kind: kind ?? this.kind,
+      createdAt: createdAt ?? this.createdAt,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      accuracy: accuracy ?? this.accuracy,
+      altitude: altitude ?? this.altitude,
+      fixTime: fixTime ?? this.fixTime,
+      name: name ?? this.name,
+      note: note ?? this.note,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (journeyId.present) {
+      map['journey_id'] = Variable<int>(journeyId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        Waypoints.$converterkind.toSql(kind.value),
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(
+        Waypoints.$convertercreatedAt.toSql(createdAt.value),
+      );
+    }
+    if (latitude.present) {
+      map['latitude'] = Variable<double>(latitude.value);
+    }
+    if (longitude.present) {
+      map['longitude'] = Variable<double>(longitude.value);
+    }
+    if (accuracy.present) {
+      map['accuracy'] = Variable<double>(accuracy.value);
+    }
+    if (altitude.present) {
+      map['altitude'] = Variable<double>(altitude.value);
+    }
+    if (fixTime.present) {
+      map['fix_time'] = Variable<int>(
+        Waypoints.$converterfixTimen.toSql(fixTime.value),
+      );
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WaypointsCompanion(')
+          ..write('id: $id, ')
+          ..write('journeyId: $journeyId, ')
+          ..write('kind: $kind, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('accuracy: $accuracy, ')
+          ..write('altitude: $altitude, ')
+          ..write('fixTime: $fixTime, ')
+          ..write('name: $name, ')
+          ..write('note: $note')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$JourneyStore extends GeneratedDatabase {
   _$JourneyStore(QueryExecutor e) : super(e);
   late final Journeys journeys = Journeys(this);
@@ -1664,6 +2311,11 @@ abstract class _$JourneyStore extends GeneratedDatabase {
   );
   late final Segments segments = Segments(this);
   late final TrackPoints trackPoints = TrackPoints(this);
+  late final Waypoints waypoints = Waypoints(this);
+  late final Index waypointsByJourney = Index(
+    'waypoints_by_journey',
+    'CREATE INDEX IF NOT EXISTS waypoints_by_journey ON waypoints (journey_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1673,6 +2325,8 @@ abstract class _$JourneyStore extends GeneratedDatabase {
     oneActiveJourney,
     segments,
     trackPoints,
+    waypoints,
+    waypointsByJourney,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1689,6 +2343,13 @@ abstract class _$JourneyStore extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('track_points', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'journeys',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('waypoints', kind: UpdateKind.delete)],
     ),
   ]);
 }

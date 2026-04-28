@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../journey/journey.dart';
+import '../journey/journey_store.dart';
 import '../journey/simplify.dart';
 
 /// Metres per pixel at zoom 0 on the equator in MapLibre's 512-pixel world.
@@ -207,3 +208,25 @@ Map<String, Object> endsFeatures(List<List<Fix>> track) {
     if (fixes.length > 1) point(fixes.last, 'finish'),
   ]);
 }
+
+/// What a waypoint is called on the map and in lists: its name, or its
+/// number on the journey.
+String waypointLabel(WaypointRow waypoint, int index) =>
+    waypoint.name ?? '${index + 1}';
+
+/// Waypoints as points with `kind` and `label` properties.
+Map<String, Object> waypointFeatures(List<WaypointRow> waypoints) =>
+    _collection([
+      for (final (i, waypoint) in waypoints.indexed)
+        {
+          'type': 'Feature',
+          'properties': {
+            'kind': waypoint.kind.name,
+            'label': waypointLabel(waypoint, i),
+          },
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [waypoint.longitude, waypoint.latitude],
+          },
+        },
+    ]);

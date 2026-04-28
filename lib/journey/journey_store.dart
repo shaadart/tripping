@@ -58,7 +58,7 @@ class JourneyStore extends _$JourneyStore {
   static const _uuid = Uuid();
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -73,6 +73,10 @@ class JourneyStore extends _$JourneyStore {
         ]) {
           await m.addColumn(journeys, column);
         }
+      }
+      if (from < 3) {
+        await m.createTable(waypoints);
+        await m.createIndex(waypointsByJourney);
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -320,6 +324,59 @@ class JourneyStore extends _$JourneyStore {
     }
     return _simplified(track, tolerance);
   }
+
+  /// Saves a waypoint on [journeyId]. Once this completes it is on disk.
+  Future<WaypointRow> addWaypoint(
+    int journeyId, {
+    required WaypointKind kind,
+    required DateTime at,
+    required double latitude,
+    required double longitude,
+    double? accuracy,
+    double? altitude,
+    DateTime? fixTime,
+    String? name,
+    String? note,
+  }) => into(waypoints).insertReturning(
+    WaypointsCompanion.insert(
+      journeyId: journeyId,
+      kind: kind,
+      createdAt: at,
+      latitude: latitude,
+      longitude: longitude,
+      accuracy: Value(accuracy),
+      altitude: Value(altitude),
+      fixTime: Value(fixTime),
+      name: Value(name),
+      note: Value(note),
+    ),
+  );
+
+  /// Names or notes a waypoint; blank text clears it. Where it is never
+  /// changes.
+  Future<void> describeWaypoint(int id, {String? name, String? note}) {
+    String? text(String? value) =>
+        value == null || value.trim().isEmpty ? null : value.trim();
+    return (update(waypoints)..where((w) => w.id.equals(id))).write(
+      WaypointsCompanion(name: Value(text(name)), note: Value(text(note))),
+    );
+  }
+
+  Future<void> deleteWaypoint(int id) =>
+      (delete(waypoints)..where((w) => w.id.equals(id))).go();
+
+  SimpleSelectStatement<Waypoints, WaypointRow> _waypointsOf(int journeyId) =>
+      select(waypoints)
+        ..where((w) => w.journeyId.equals(journeyId))
+        ..orderBy([(w) => OrderingTerm.asc(w.createdAt)]);
+
+  /// The journey's waypoints in the order they were made.
+  Future<List<WaypointRow>> waypointsOf(int journeyId) =>
+      _waypointsOf(journeyId).get();
+
+  /// [waypointsOf], again whenever they change.
+  Stream<List<WaypointRow>> watchWaypoints(int journeyId) =>
+      _waypointsOf(journeyId).watch();
 
   /// Deletes an inactive journey with all of its segments and fixes.
   Future<void> deleteJourney(int journeyId) => transaction(() async {

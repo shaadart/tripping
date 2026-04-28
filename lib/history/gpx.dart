@@ -1,7 +1,9 @@
 import '../journey/journey.dart';
+import '../journey/journey_store.dart';
 
-/// A journey as GPX 1.1: one track, one `trkseg` per recorded segment, so
-/// other apps don't join what Tripping never joined either.
+/// A journey as GPX 1.1: its waypoints, then one track with one `trkseg` per
+/// recorded segment, so other apps don't join what Tripping never joined
+/// either.
 ///
 /// Only what was measured is written: position, altitude and time. GPX has
 /// no field for a fix's accuracy in metres (`hdop` is a unitless dilution),
@@ -11,6 +13,7 @@ String gpxOf({
   required JourneyMode mode,
   required DateTime startedAt,
   required List<List<Fix>> track,
+  List<WaypointRow> waypoints = const [],
 }) {
   final out = StringBuffer()
     ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
@@ -24,7 +27,31 @@ String gpxOf({
     ..writeln('  <metadata>')
     ..writeln('    <name>${_escape(name)}</name>')
     ..writeln('    <time>${_time(startedAt)}</time>')
-    ..writeln('  </metadata>')
+    ..writeln('  </metadata>');
+  // GPX wants waypoints before the track. A marked one carries the time of
+  // the fix it came from; a planned one, when it was planned.
+  for (final waypoint in waypoints) {
+    out
+      ..write(
+        '  <wpt lat="${waypoint.latitude.toStringAsFixed(7)}" '
+        'lon="${waypoint.longitude.toStringAsFixed(7)}">',
+      )
+      ..write(switch (waypoint.altitude) {
+        final altitude? => '<ele>${altitude.toStringAsFixed(1)}</ele>',
+        null => '',
+      })
+      ..write('<time>${_time(waypoint.fixTime ?? waypoint.createdAt)}</time>')
+      ..write(switch (waypoint.name) {
+        final name? => '<name>${_escape(name)}</name>',
+        null => '',
+      })
+      ..write(switch (waypoint.note) {
+        final note? => '<desc>${_escape(note)}</desc>',
+        null => '',
+      })
+      ..writeln('<type>${waypoint.kind.name}</type></wpt>');
+  }
+  out
     ..writeln('  <trk>')
     ..writeln('    <name>${_escape(name)}</name>')
     ..writeln('    <type>${mode.name}</type>');

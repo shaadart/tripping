@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../app/theme.dart';
 import '../journey/journey.dart';
+import '../journey/journey_store.dart';
 import 'map_style.dart';
 import 'track_geometry.dart';
 
@@ -12,10 +12,17 @@ import 'track_geometry.dart';
 /// The map is created before the track has loaded, so its style loads at the
 /// same time; a cover hides it until the track is drawn and framed.
 class TrackMap extends StatefulWidget {
-  const TrackMap({super.key, required this.track, this.onDrawn});
+  const TrackMap({
+    super.key,
+    required this.track,
+    this.waypoints = const [],
+    this.onDrawn,
+  });
 
   /// Null while it is still loading.
   final List<List<Fix>>? track;
+
+  final List<WaypointRow> waypoints;
 
   /// Called once the track is on the map, with the time since this widget
   /// was created.
@@ -59,17 +66,28 @@ class _TrackMapState extends State<TrackMap> {
       'ends',
       CircleLayerProperties(
         circleRadius: 7,
+        // Start: white ringed in ember; finish: solid ember. Green is
+        // kept for waypoints marked on the way.
         circleColor: [
           'match',
           ['get', 'end'],
           'start',
-          Palette.moss.toHexStringRGB(),
+          '#FFFFFF',
           ember,
         ],
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 2,
+        circleStrokeColor: [
+          'match',
+          ['get', 'end'],
+          'start',
+          ember,
+          '#FFFFFF',
+        ],
+        circleStrokeWidth: 3,
       ),
     );
+    await map.addGeoJsonSource('waypoints', waypointFeatures(widget.waypoints));
+    if (!mounted) return;
+    await addWaypointLayers(map, context, 'waypoints');
     await fitCamera(
       map,
       track,

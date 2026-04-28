@@ -7,6 +7,7 @@ import 'package:tripping/app/record_screen.dart';
 import 'package:tripping/app/system_access.dart';
 import 'package:tripping/app/theme.dart';
 import 'package:tripping/journey/journey.dart';
+import 'package:tripping/journey/journey_store.dart';
 import 'package:tripping/recording/location_source.dart';
 import 'package:tripping/recording/recorder.dart';
 
@@ -50,6 +51,7 @@ void main() {
           location: location,
           system: system,
           mapBuilder: (_, _) => const SizedBox.expand(),
+          waypoints: store,
           historyBuilder: (_) => const Scaffold(body: Text('History here')),
           onToggleHighSun: () => sunToggles++,
           clock: () => now,
@@ -179,6 +181,78 @@ void main() {
     expect(find.text('No GPS fix for 20 s'), findsOneWidget);
     expect(find.text('0:00:20'), findsOneWidget);
     await cleanUp(tester);
+  });
+
+  group('waypoints (X1)', () {
+    Future<List<WaypointRow>> stored(WidgetTester tester) async =>
+        (await tester.runAsync(() async {
+          final journey = await store.activeJourney();
+          return store.waypointsOf(journey!.id);
+        }))!;
+
+    Finder markButton() => find.widgetWithText(FloatingActionButton, 'Mark');
+
+    testWidgets('mark saves the fix at once, then names it', (tester) async {
+      await show(tester);
+      await tap(tester, 'Expedition');
+      expect(
+        tester.widget<FloatingActionButton>(markButton()).onPressed,
+        isNull,
+        reason: 'nothing to mark before the first fix',
+      );
+
+      await act(tester, () async => location.emit(walkFix(0)));
+      await act(tester, () async => tester.tap(markButton()));
+      await tester.pumpAndSettle();
+      expect(find.text('Marked here'), findsOneWidget);
+      var waypoints = await stored(tester);
+      expect(waypoints.single.kind, WaypointKind.marked);
+      expect(waypoints.single.latitude, walkFix(0).latitude);
+      expect(waypoints.single.accuracy, 3);
+      expect(waypoints.single.fixTime, walkFix(0).time);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Name (optional)'),
+        'Spring',
+      );
+      await act(tester, () async => tester.tap(find.text('Save')));
+      await tester.pumpAndSettle();
+      expect(find.text('Marked here'), findsNothing);
+      waypoints = await stored(tester);
+      expect(waypoints.single.name, 'Spring');
+      await cleanUp(tester);
+    });
+
+    testWidgets('a mark from an old fix says so, and can be deleted', (
+      tester,
+    ) async {
+      await show(tester);
+      await tap(tester, 'Expedition');
+      await act(tester, () async => location.emit(walkFix(0)));
+      now = t0.add(const Duration(seconds: 20));
+      await tester.pump(const Duration(seconds: 1));
+
+      await act(tester, () async => tester.tap(markButton()));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Marked at the last position known, 20 s ago.'),
+        findsOneWidget,
+      );
+      await act(tester, () async => tester.tap(find.text('Delete')));
+      await tester.pumpAndSettle();
+      expect(await stored(tester), isEmpty);
+      await cleanUp(tester);
+    });
+
+    testWidgets('there is nothing to mark while paused', (tester) async {
+      await show(tester);
+      await tap(tester, 'Expedition');
+      await act(tester, () async => location.emit(walkFix(0)));
+      expect(markButton(), findsOneWidget);
+      await tap(tester, 'Pause');
+      expect(markButton(), findsNothing);
+      await cleanUp(tester);
+    });
   });
 
   group('two kinds of journey (B1)', () {

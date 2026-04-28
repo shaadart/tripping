@@ -49,3 +49,54 @@ Future<void> fitCamera(
     ),
   );
 }
+
+/// Waypoints on [source]: a solid moss dot where you were, a hollow river
+/// ring where you plan to go (nobody has been there), each with its label.
+Future<void> addWaypointLayers(
+  MapLibreMapController map,
+  BuildContext context,
+  String source,
+) async {
+  final scheme = Theme.of(context).colorScheme;
+  final marked = scheme.tertiary.toHexStringRGB();
+  final planned = scheme.secondary.toHexStringRGB();
+  final ink = scheme.onSurface.toHexStringRGB();
+  final halo = scheme.surface.toHexStringRGB();
+  await map.addCircleLayer(
+    source,
+    '$source-dots',
+    CircleLayerProperties(
+      circleRadius: 7,
+      circleColor: [
+        'match',
+        ['get', 'kind'],
+        'marked',
+        marked,
+        'rgba(0,0,0,0)',
+      ],
+      circleStrokeColor: [
+        'match',
+        ['get', 'kind'],
+        'marked',
+        '#FFFFFF',
+        planned,
+      ],
+      circleStrokeWidth: 3,
+    ),
+  );
+  await map.addSymbolLayer(
+    source,
+    '$source-labels',
+    SymbolLayerProperties(
+      textField: ['get', 'label'],
+      textFont: ['Noto Sans Regular'],
+      textSize: 13,
+      textOffset: [0, 1.2],
+      textAnchor: 'top',
+      textColor: ink,
+      textHaloColor: halo,
+      textHaloWidth: 1.5,
+      textOptional: true,
+    ),
+  );
+}

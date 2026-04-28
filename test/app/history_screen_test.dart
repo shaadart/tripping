@@ -30,6 +30,30 @@ class FakeHistory implements JourneyHistory {
   ];
 
   @override
+  Future<List<WaypointRow>> waypointsOf(int journeyId) async => [
+    WaypointRow(
+      id: 1,
+      journeyId: journeyId,
+      kind: WaypointKind.marked,
+      createdAt: t0.add(const Duration(minutes: 1)),
+      latitude: 32.001,
+      longitude: 77,
+      accuracy: 6,
+      fixTime: t0.add(const Duration(minutes: 1)),
+      name: 'Spring',
+      note: 'Cold water',
+    ),
+    WaypointRow(
+      id: 2,
+      journeyId: journeyId,
+      kind: WaypointKind.planned,
+      createdAt: t0.add(const Duration(minutes: 2)),
+      latitude: 32.01,
+      longitude: 77.01,
+    ),
+  ];
+
+  @override
   Future<String> gpxOf(PastJourney past, {required String name}) async =>
       '<gpx/>';
 
@@ -60,6 +84,7 @@ PastJourney pastWalk(int id) => PastJourney(
 
 void main() {
   late List<List<List<Fix>>> drawn;
+  var shownWaypoints = <WaypointRow>[];
 
   setUp(() => drawn = []);
 
@@ -73,8 +98,9 @@ void main() {
         theme: trippingTheme(Brightness.light),
         home: HistoryScreen(
           history: history,
-          trackMapBuilder: (track) {
+          trackMapBuilder: (track, waypoints) {
             if (track != null) drawn.add(track);
+            shownWaypoints = waypoints;
             return const SizedBox.expand();
           },
           onExport: onExport,
@@ -106,6 +132,23 @@ void main() {
     expect(find.text('1.23 km'), findsOneWidget);
     expect(find.text('0:03:00'), findsOneWidget);
     expect(find.textContaining('Recorded in 2 parts'), findsOneWidget);
+  });
+
+  testWidgets('waypoints are on the map and listed, numbered alike', (
+    tester,
+  ) async {
+    await show(tester, FakeHistory([pastWalk(1)]));
+    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.pumpAndSettle();
+
+    expect(shownWaypoints, hasLength(2));
+    expect(find.text('Waypoints'), findsOneWidget);
+    expect(find.text('Spring'), findsOneWidget);
+    expect(find.text('Cold water'), findsOneWidget);
+    expect(find.textContaining('Marked'), findsOneWidget);
+    expect(find.textContaining('±6 m'), findsOneWidget);
+    expect(find.text('Waypoint 2'), findsOneWidget);
+    expect(find.textContaining('Planned'), findsOneWidget);
   });
 
   testWidgets('deleting asks first, then removes the journey', (tester) async {

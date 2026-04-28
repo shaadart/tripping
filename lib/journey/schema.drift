@@ -52,3 +52,26 @@ CREATE TABLE track_points (
   heading REAL,
   PRIMARY KEY (journey_id, time)
 ) WITHOUT ROWID AS TrackPointRow;
+
+-- A place on a journey (v3): where the user was when they marked it, with
+-- the fix it came from, or a point they chose on the map. Deleting the
+-- journey deletes its waypoints.
+CREATE TABLE waypoints (
+  id INTEGER NOT NULL PRIMARY KEY,
+  journey_id INTEGER NOT NULL REFERENCES journeys (id) ON DELETE CASCADE,
+  -- Stored by name. Not ENUMNAME(WaypointKind): "WaypointKind" contains
+  -- "INT", which gives the column integer affinity, and the enum would be
+  -- stored by its index.
+  kind TEXT NOT NULL MAPPED BY `const WaypointKindByName()`,
+  created_at INTEGER NOT NULL MAPPED BY `const UtcMillis()`,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  -- Marked waypoints only: the fix's accuracy, altitude and GPS time.
+  accuracy REAL,
+  altitude REAL,
+  fix_time INTEGER MAPPED BY `const UtcMillis()`,
+  name TEXT,
+  note TEXT
+) AS WaypointRow;
+
+CREATE INDEX IF NOT EXISTS waypoints_by_journey ON waypoints (journey_id);

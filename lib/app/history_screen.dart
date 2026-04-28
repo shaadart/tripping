@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../history/journey_history.dart';
 import '../journey/journey.dart';
+import '../journey/journey_store.dart';
 import 'format.dart';
 import 'journey_screen.dart';
 
@@ -23,7 +24,8 @@ class HistoryScreen extends StatefulWidget {
 
   /// Builds the map of a past journey; injected so tests need no platform
   /// map.
-  final Widget Function(List<List<Fix>>? track) trackMapBuilder;
+  final Widget Function(List<List<Fix>>? track, List<WaypointRow> waypoints)
+  trackMapBuilder;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();

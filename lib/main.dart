@@ -56,13 +56,15 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
       system: const ChannelSystemAccess(),
       mapBuilder: (state, now) =>
           JourneyMap(state: state, store: store, now: now),
+      waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
       historyBuilder: (_) {
         final history = JourneyHistory(store);
         return HistoryScreen(
           history: history,
-          trackMapBuilder: (track) => TrackMap(
+          trackMapBuilder: (track, waypoints) => TrackMap(
             track: track,
+            waypoints: waypoints,
             onDrawn: LongJourneyBench.enabled
                 ? LongJourneyBench.detailDrawn
                 : null,
