@@ -58,7 +58,7 @@ class JourneyStore extends _$JourneyStore {
   static const _uuid = Uuid();
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -77,6 +77,10 @@ class JourneyStore extends _$JourneyStore {
       if (from < 3) {
         await m.createTable(waypoints);
         await m.createIndex(waypointsByJourney);
+      }
+      if (from < 4) {
+        await m.createTable(routes);
+        await m.createTable(recentPlaces);
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -377,6 +381,107 @@ class JourneyStore extends _$JourneyStore {
   /// [waypointsOf], again whenever they change.
   Stream<List<WaypointRow>> watchWaypoints(int journeyId) =>
       _waypointsOf(journeyId).watch();
+
+  /// Sets where [journeyId] is going; any route planned before is dropped,
+  /// since it led somewhere else.
+  Future<void> setDestination(
+    int journeyId, {
+    required String name,
+    String? detail,
+    required double latitude,
+    required double longitude,
+  }) => into(routes).insertOnConflictUpdate(
+    RoutesCompanion.insert(
+      journeyId: Value(journeyId),
+      destination: name,
+      destinationDetail: Value(detail),
+      latitude: latitude,
+      longitude: longitude,
+      // Said outright: on conflict, columns left out would keep the old
+      // route, a way to somewhere else.
+      kind: const Value(null),
+      provider: const Value(null),
+      computedAt: const Value(null),
+      meters: const Value(null),
+      seconds: const Value(null),
+      geometry: const Value(null),
+    ),
+  );
+
+  /// Keeps the way planned to the journey's destination.
+  Future<void> saveRoute(
+    int journeyId, {
+    required RouteKind kind,
+    required String provider,
+    required DateTime computedAt,
+    required double meters,
+    double? seconds,
+    required String geometry,
+  }) => (update(routes)..where((r) => r.journeyId.equals(journeyId))).write(
+    RoutesCompanion(
+      kind: Value(kind),
+      provider: Value(provider),
+      computedAt: Value(computedAt),
+      meters: Value(meters),
+      seconds: Value(seconds),
+      geometry: Value(geometry),
+    ),
+  );
+
+  Future<void> clearDestination(int journeyId) =>
+      (delete(routes)..where((r) => r.journeyId.equals(journeyId))).go();
+
+  SimpleSelectStatement<Routes, RouteRow> _routeOf(int journeyId) =>
+      select(routes)..where((r) => r.journeyId.equals(journeyId));
+
+  Future<RouteRow?> routeOf(int journeyId) =>
+      _routeOf(journeyId).getSingleOrNull();
+
+  Stream<RouteRow?> watchRoute(int journeyId) =>
+      _routeOf(journeyId).watchSingleOrNull();
+
+  /// Remembers a place chosen as a destination, keeping the [keep] most
+  /// recent; choosing one again moves it to the top.
+  Future<void> rememberPlace({
+    required String name,
+    String? detail,
+    required double latitude,
+    required double longitude,
+    required DateTime at,
+    int keep = 20,
+  }) => transaction(() async {
+    await (delete(recentPlaces)..where(
+          (p) =>
+              p.name.equals(name) &
+              p.latitude.equals(latitude) &
+              p.longitude.equals(longitude),
+        ))
+        .go();
+    await into(recentPlaces).insert(
+      RecentPlacesCompanion.insert(
+        name: name,
+        detail: Value(detail),
+        latitude: latitude,
+        longitude: longitude,
+        usedAt: at,
+      ),
+    );
+    final stale =
+        await (select(recentPlaces)
+              ..orderBy([(p) => OrderingTerm.desc(p.usedAt)])
+              ..limit(1000, offset: keep))
+            .get();
+    for (final place in stale) {
+      await (delete(recentPlaces)..where((p) => p.id.equals(place.id))).go();
+    }
+  });
+
+  /// The places chosen as destinations most recently, newest first.
+  Future<List<RecentPlaceRow>> latestPlaces({int limit = 8}) =>
+      (select(recentPlaces)
+            ..orderBy([(p) => OrderingTerm.desc(p.usedAt)])
+            ..limit(limit))
+          .get();
 
   /// Deletes an inactive journey with all of its segments and fixes.
   Future<void> deleteJourney(int journeyId) => transaction(() async {

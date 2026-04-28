@@ -11,6 +11,9 @@ import '../journey/journey_store.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
 import '../app/waypoint_sheet.dart';
+import '../places/place.dart';
+import '../places/polyline.dart';
+import '../routing/route_planner.dart';
 import 'map_style.dart';
 import 'track_geometry.dart';
 
@@ -57,11 +60,15 @@ class JourneyMap extends StatefulWidget {
     required this.state,
     required this.store,
     required this.now,
+    this.planner,
   });
 
   final RecorderState state;
   final JourneyStore store;
   final DateTime now;
+
+  /// Destinations and routes to draw; also lets a long press choose one.
+  final RoutePlanner? planner;
 
   @override
   State<JourneyMap> createState() => _JourneyMapState();
@@ -72,6 +79,8 @@ class _JourneyMapState extends State<JourneyMap> {
   static const _tailSource = 'track-tail';
   static const _positionSource = 'position';
   static const _waypointSource = 'waypoints';
+  static const _routeSource = 'route';
+  static const _destinationSource = 'destination';
 
   MapLibreMapController? _map;
   bool _styleReady = false;
@@ -87,6 +96,7 @@ class _JourneyMapState extends State<JourneyMap> {
   bool _blank = false;
   StreamSubscription<List<WaypointRow>>? _waypointWatch;
   Timer? _blankTimer;
+  StreamSubscription<RouteRow?>? _routeWatch;
   JourneyMode _mode = JourneyMode.expedition;
 
   /// The road camera's heading, kept while the GPS heading is unreliable.
@@ -114,6 +124,42 @@ class _JourneyMapState extends State<JourneyMap> {
       final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
       final stale = warningColor(context).toHexStringRGB();
       final line = trackLine(context);
+      final river = Theme.of(context).colorScheme.secondary.toHexStringRGB();
+      final ink = Theme.of(context).colorScheme.onSurface.toHexStringRGB();
+      final halo = Theme.of(context).colorScheme.surface.toHexStringRGB();
+      // The planned way first, so the track drawn on top shows where the
+      // journey really went. A straight line is dashed: it is not a road.
+      await map.addGeoJsonSource(_routeSource, trackFeatures(const []));
+      await map.addLineLayer(
+        _routeSource,
+        'route-road',
+        LineLayerProperties(
+          lineColor: river,
+          lineWidth: 6,
+          lineOpacity: 0.75,
+          lineCap: 'round',
+          lineJoin: 'round',
+        ),
+        filter: [
+          '==',
+          ['get', 'kind'],
+          RouteKind.road.name,
+        ],
+      );
+      await map.addLineLayer(
+        _routeSource,
+        'route-straight',
+        LineLayerProperties(
+          lineColor: river,
+          lineWidth: 3,
+          lineDasharray: [1.5, 1.5],
+        ),
+        filter: [
+          '==',
+          ['get', 'kind'],
+          RouteKind.straight.name,
+        ],
+      );
       for (final source in [_historySource, _tailSource, _positionSource]) {
         await map.addGeoJsonSource(source, trackFeatures(const []));
       }
@@ -124,6 +170,32 @@ class _JourneyMapState extends State<JourneyMap> {
       await map.addGeoJsonSource(_waypointSource, waypointFeatures(const []));
       if (!mounted) return;
       await addWaypointLayers(map, context, _waypointSource);
+      await map.addGeoJsonSource(_destinationSource, trackFeatures(const []));
+      await map.addCircleLayer(
+        _destinationSource,
+        'destination-dot',
+        CircleLayerProperties(
+          circleRadius: 8,
+          circleColor: '#FFFFFF',
+          circleStrokeColor: river,
+          circleStrokeWidth: 4,
+        ),
+      );
+      await map.addSymbolLayer(
+        _destinationSource,
+        'destination-label',
+        SymbolLayerProperties(
+          textField: ['get', 'name'],
+          textFont: ['Noto Sans Regular'],
+          textSize: 13,
+          textOffset: [0, 1.3],
+          textAnchor: 'top',
+          textColor: ink,
+          textHaloColor: halo,
+          textHaloWidth: 1.5,
+          textOptional: true,
+        ),
+      );
       await map.addCircleLayer(
         _positionSource,
         'accuracy',
@@ -184,6 +256,7 @@ class _JourneyMapState extends State<JourneyMap> {
     if (journey?.id != _journeyId) {
       _journeyId = journey?.id;
       _watchWaypoints(map, journey?.id);
+      _watchRoute(map, journey?.id);
       _track.reset(
         journey == null ? const [] : await widget.store.track(journey.id),
       );
@@ -372,6 +445,117 @@ class _JourneyMapState extends State<JourneyMap> {
         );
   }
 
+  /// Draws the journey's destination and the way there; with no journey,
+  /// the destination chosen for the next one.
+  void _watchRoute(MapLibreMapController map, int? journeyId) {
+    _routeWatch?.cancel();
+    _routeWatch = null;
+    widget.planner?.pending.removeListener(_drawPending);
+    final planner = widget.planner;
+    if (planner == null) return;
+    if (journeyId == null) {
+      planner.pending.addListener(_drawPending);
+      _drawPending();
+      return;
+    }
+    _routeWatch = planner.watch(journeyId).listen((route) {
+      _serially(() async {
+        await map.setGeoJsonSource(
+          _routeSource,
+          route?.kind == null || route?.geometry == null
+              ? trackFeatures(const [])
+              : routeFeatures(decodePolyline(route!.geometry!), route.kind!),
+        );
+        await map.setGeoJsonSource(
+          _destinationSource,
+          route == null
+              ? trackFeatures(const [])
+              : destinationFeatures(
+                  route.destination,
+                  route.latitude,
+                  route.longitude,
+                ),
+        );
+      });
+    });
+  }
+
+  void _drawPending() {
+    final map = _map;
+    final pending = widget.planner?.pending.value;
+    if (map == null) return;
+    _serially(() async {
+      await map.setGeoJsonSource(_routeSource, trackFeatures(const []));
+      await map.setGeoJsonSource(
+        _destinationSource,
+        pending == null
+            ? trackFeatures(const [])
+            : destinationFeatures(
+                pending.name,
+                pending.latitude,
+                pending.longitude,
+              ),
+      );
+    });
+  }
+
+  /// A long press offers to go there, or, on a journey, to plan a point
+  /// there; without destinations it plans the point at once.
+  Future<void> _longPress(LatLng at) async {
+    final planner = widget.planner;
+    if (planner == null) return _plan(at);
+    final journey = switch (widget.state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey,
+      Idle() => null,
+    };
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.flag_circle_outlined),
+              title: const Text('Go here'),
+              subtitle: Text(
+                journey == null
+                    ? 'Make it the destination of the next journey'
+                    : 'Make it the destination of this journey',
+              ),
+              onTap: () => Navigator.pop(context, 'go'),
+            ),
+            if (journey != null)
+              ListTile(
+                leading: const Icon(Icons.outlined_flag),
+                title: const Text('Plan a point here'),
+                subtitle: const Text('A waypoint you mean to reach'),
+                onTap: () => Navigator.pop(context, 'plan'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case 'go':
+        final place = Place(
+          name: mapPoint,
+          latitude: at.latitude,
+          longitude: at.longitude,
+        );
+        if (journey == null) {
+          planner.pending.value = place;
+        } else {
+          await planner.goTo(journey.id, place);
+        }
+      case 'plan':
+        await _plan(at);
+    }
+  }
+
   /// A long press plans a point there, on the journey under way.
   Future<void> _plan(LatLng at) async {
     final journey = switch (widget.state) {
@@ -399,6 +583,8 @@ class _JourneyMapState extends State<JourneyMap> {
 
   @override
   void dispose() {
+    _routeWatch?.cancel();
+    widget.planner?.pending.removeListener(_drawPending);
     _blankTimer?.cancel();
     _waypointWatch?.cancel();
     super.dispose();
@@ -438,7 +624,7 @@ class _JourneyMapState extends State<JourneyMap> {
             ),
             onMapCreated: (map) => _map = map,
             onStyleLoadedCallback: _onStyleLoaded,
-            onMapLongClick: (_, at) => _plan(at),
+            onMapLongClick: (_, at) => _longPress(at),
             // Below the status bar, level with the header (the road view
             // turns, so the compass shows where north is).
             compassViewPosition: CompassViewPosition.topRight,

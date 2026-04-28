@@ -230,3 +230,38 @@ Map<String, Object> waypointFeatures(List<WaypointRow> waypoints) =>
           },
         },
     ]);
+
+/// A planned way to a destination as a line with a `kind` property: `road`
+/// or `straight` (drawn differently, never mistaken for each other).
+Map<String, Object> routeFeatures(
+  List<(double, double)> points,
+  RouteKind kind,
+) => _collection([
+  if (points.length >= 2)
+    {
+      'type': 'Feature',
+      'properties': {'kind': kind.name},
+      'geometry': {
+        'type': 'LineString',
+        'coordinates': [
+          for (final (latitude, longitude) in points) [longitude, latitude],
+        ],
+      },
+    },
+]);
+
+/// Where a journey is going, as a point with its `name`.
+Map<String, Object> destinationFeatures(
+  String name,
+  double latitude,
+  double longitude,
+) => _collection([
+  {
+    'type': 'Feature',
+    'properties': {'name': name},
+    'geometry': {
+      'type': 'Point',
+      'coordinates': [longitude, latitude],
+    },
+  },
+]);

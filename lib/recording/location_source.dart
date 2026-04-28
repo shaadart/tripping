@@ -48,4 +48,10 @@ abstract interface class LocationSource {
   /// - signal loss of access as a [LocationUnavailable] error and keep the
   ///   stream open.
   Stream<Fix> watch(JourneyMode mode);
+
+  /// Where the platform last knew the phone to be, without asking for a new
+  /// fix or for permission; null when it knows nothing or access is not
+  /// granted. It may be old: never record it, and check [Fix.time] before
+  /// presenting it as where the phone is now.
+  Future<Fix?> lastKnown();
 }

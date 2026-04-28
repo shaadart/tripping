@@ -75,3 +75,34 @@ CREATE TABLE waypoints (
 ) AS WaypointRow;
 
 CREATE INDEX IF NOT EXISTS waypoints_by_journey ON waypoints (journey_id);
+
+-- A journey's destination and the way there (v4). Kept with the journey so
+-- the route is still there without a connection or after a restart. A
+-- straight line is stored as such and never shown as a road. The route
+-- columns stay NULL until a way has been planned.
+CREATE TABLE routes (
+  journey_id INTEGER NOT NULL PRIMARY KEY
+    REFERENCES journeys (id) ON DELETE CASCADE,
+  destination TEXT NOT NULL,
+  destination_detail TEXT,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  -- Stored by name (see waypoints.kind).
+  kind TEXT MAPPED BY `const RouteKindByName()`,
+  provider TEXT,
+  computed_at INTEGER MAPPED BY `const UtcMillis()`,
+  meters REAL,
+  seconds REAL,
+  -- The line, as a polyline with six decimals.
+  geometry TEXT
+) AS RouteRow;
+
+-- Places chosen as destinations, newest first (v4). On this phone only.
+CREATE TABLE recent_places (
+  id INTEGER NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL,
+  detail TEXT,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  used_at INTEGER NOT NULL MAPPED BY `const UtcMillis()`
+) AS RecentPlaceRow;

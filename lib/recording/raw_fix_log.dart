@@ -24,6 +24,9 @@ class RawFixLog implements LocationSource {
       _inner.openSettingsFor(problem);
 
   @override
+  Future<Fix?> lastKnown() => _inner.lastKnown();
+
+  @override
   Stream<Fix> watch(JourneyMode mode) {
     _write({'event': 'watch', 'mode': mode.name, 'at': _now()});
     return _inner

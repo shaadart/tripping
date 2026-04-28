@@ -51,7 +51,32 @@ final _schemaV2 = [
   'ALTER TABLE journeys ADD COLUMN outline TEXT',
 ];
 
-const _tables = ['journeys', 'segments', 'track_points', 'waypoints'];
+/// Schema v3 as shipped in `50a887f`, frozen: v2 plus waypoints.
+final _schemaV3 = [
+  ..._schemaV2,
+  '''CREATE TABLE waypoints (
+    id INTEGER NOT NULL PRIMARY KEY,
+    journey_id INTEGER NOT NULL REFERENCES journeys (id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    accuracy REAL,
+    altitude REAL,
+    fix_time INTEGER,
+    name TEXT,
+    note TEXT)''',
+  'CREATE INDEX IF NOT EXISTS waypoints_by_journey ON waypoints (journey_id)',
+];
+
+const _tables = [
+  'journeys',
+  'segments',
+  'track_points',
+  'waypoints',
+  'routes',
+  'recent_places',
+];
 
 final _t0 = DateTime.utc(2026, 10, 27, 6, 30).millisecondsSinceEpoch;
 
@@ -127,7 +152,7 @@ void main() {
     await fresh.close();
     final upgraded = sqlite3.open(file.path);
     final created = sqlite3.open('${dir.path}/fresh.sqlite');
-    expect(upgraded.select('PRAGMA user_version').single.values.single, 3);
+    expect(upgraded.select('PRAGMA user_version').single.values.single, 4);
     for (final table in _tables) {
       expect(columnsOf(upgraded, table), columnsOf(created, table));
     }
@@ -175,7 +200,7 @@ void main() {
     await fresh.close();
     final upgraded = sqlite3.open(file.path);
     final created = sqlite3.open('${dir.path}/fresh.sqlite');
-    expect(upgraded.select('PRAGMA user_version').single.values.single, 3);
+    expect(upgraded.select('PRAGMA user_version').single.values.single, 4);
     for (final table in _tables) {
       expect(columnsOf(upgraded, table), columnsOf(created, table));
     }
@@ -190,14 +215,66 @@ void main() {
     created.close();
   });
 
-  test('a fresh database starts at v3', () async {
+  test(
+    'a v3 database upgrades to v4 with its waypoints, ready for routes',
+    () async {
+      final file = File('${dir.path}/journeys.sqlite');
+      final v3 = sqlite3.open(file.path);
+      for (final statement in _schemaV3) {
+        v3.execute(statement);
+      }
+      v3
+        ..execute('PRAGMA user_version = 3')
+        ..execute(
+          "INSERT INTO journeys VALUES (1, 'u-1', 'road', 'ended', ?, ?, "
+          "NULL, NULL, NULL, NULL, NULL)",
+          [_t0, _t0 + 60000],
+        )
+        ..execute("INSERT INTO segments VALUES (1, 0, ?, ?, 'ended')", [
+          _t0,
+          _t0 + 60000,
+        ])
+        ..execute(
+          "INSERT INTO waypoints VALUES (1, 1, 'marked', ?, 32.2, 77.1, 5, "
+          "2000, ?, 'Spring', NULL)",
+          [_t0, _t0],
+        )
+        ..close();
+
+      final store = JourneyStore.file(file);
+      final waypoint = (await store.waypointsOf(1)).single;
+      expect((waypoint.kind, waypoint.name), (WaypointKind.marked, 'Spring'));
+      await store.setDestination(
+        1,
+        name: 'Cubbon Park',
+        latitude: 12.97,
+        longitude: 77.59,
+      );
+      expect((await store.routeOf(1))?.destination, 'Cubbon Park');
+      await store.close();
+
+      final fresh = JourneyStore.file(File('${dir.path}/fresh.sqlite'));
+      await fresh.activeJourney();
+      await fresh.close();
+      final upgraded = sqlite3.open(file.path);
+      final created = sqlite3.open('${dir.path}/fresh.sqlite');
+      expect(upgraded.select('PRAGMA user_version').single.values.single, 4);
+      for (final table in _tables) {
+        expect(columnsOf(upgraded, table), columnsOf(created, table));
+      }
+      upgraded.close();
+      created.close();
+    },
+  );
+
+  test('a fresh database starts at v4', () async {
     final store = JourneyStore(NativeDatabase.memory());
     final journey = await store.startJourney(
       JourneyMode.expedition,
       at: DateTime.utc(2026),
     );
     expect(journey.summaryVersion, isNull);
-    expect(store.schemaVersion, 3);
+    expect(store.schemaVersion, 4);
     await store.close();
   });
 }

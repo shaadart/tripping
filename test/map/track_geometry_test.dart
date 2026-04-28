@@ -157,6 +157,39 @@ void main() {
     expect(coordinatesOf({'features': features}).last, [77.002, 32]);
   });
 
+  test('a route is one line marked road or straight, longitude first', () {
+    final road = routeFeatures(const [
+      (12.97, 77.59),
+      (12.95, 77.58),
+    ], RouteKind.road);
+    expect(coordinatesOf(road).single, [
+      [77.59, 12.97],
+      [77.58, 12.95],
+    ]);
+    final straight = routeFeatures(const [
+      (12.97, 77.59),
+      (12.95, 77.58),
+    ], RouteKind.straight);
+    expect(
+      (((straight['features']! as List).single as Map)['properties']
+          as Map)['kind'],
+      'straight',
+    );
+    expect(
+      routeFeatures(const [(12.97, 77.59)], RouteKind.road)['features'],
+      isEmpty,
+    );
+  });
+
+  test('a destination is a named point', () {
+    final feature =
+        (destinationFeatures('Lalbagh', 12.95, 77.58)['features']! as List)
+                .single
+            as Map;
+    expect(feature['properties'], {'name': 'Lalbagh'});
+    expect((feature['geometry'] as Map)['coordinates'], [77.58, 12.95]);
+  });
+
   group('TrackBuffer', () {
     /// Adds [fixes] the way the live map does.
     void record(

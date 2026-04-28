@@ -33,6 +33,16 @@ enum WaypointKind {
   planned,
 }
 
+/// How a route to a destination was made.
+enum RouteKind {
+  /// Along roads or paths, from a routing service.
+  road,
+
+  /// A straight line, when no road route could be had. Never drawn or
+  /// described as a road.
+  straight,
+}
+
 /// One location fix as reported by the device. All times are UTC.
 class Fix {
   const Fix({
@@ -97,6 +107,11 @@ class Fix {
 /// what stored waypoints mean.
 class WaypointKindByName extends EnumNameConverter<WaypointKind> {
   const WaypointKindByName() : super(WaypointKind.values);
+}
+
+/// Stores a [RouteKind] by name, like [WaypointKindByName].
+class RouteKindByName extends EnumNameConverter<RouteKind> {
+  const RouteKindByName() : super(RouteKind.values);
 }
 
 /// Stores instants as UTC milliseconds since the epoch.

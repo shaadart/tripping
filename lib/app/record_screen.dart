@@ -8,12 +8,17 @@ import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../map/offline_area.dart';
 import '../map/offline_maps.dart';
+import '../places/place.dart';
+import '../places/place_search.dart';
+import '../routing/route_planner.dart';
+import '../routing/router.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
 import 'figure.dart';
 import 'format.dart';
 import 'system_access.dart';
+import 'search_screen.dart';
 import 'theme.dart';
 import 'waypoint_sheet.dart';
 
@@ -25,6 +30,10 @@ const _noFixAfter = Duration(seconds: 30);
 
 /// How long a fix's speed still counts as the speed now.
 const _speedFreshFor = Duration(seconds: 5);
+
+/// How long a position still counts as where the phone is, for saying how
+/// far search results are.
+const _nearFreshFor = Duration(minutes: 10);
 
 /// One journey at a time: its numbers, one main action, and plain words
 /// about anything that is wrong. The map takes the centre in M1.
@@ -39,6 +48,8 @@ class RecordScreen extends StatefulWidget {
     this.historyBuilder,
     this.offlineMapsBuilder,
     this.savedOffline,
+    this.places,
+    this.planner,
     this.onToggleHighSun,
     this.clock = _utcNow,
   });
@@ -62,6 +73,12 @@ class RecordScreen extends StatefulWidget {
   /// The offline areas saved, to say when the journey is inside one.
   final ValueListenable<List<OfflineMap>>? savedOffline;
 
+  /// Finds places to go; without it there is no search.
+  final PlaceSearch? places;
+
+  /// Keeps destinations and plans the way there.
+  final RoutePlanner? planner;
+
   /// Switches the high-contrast look for bright daylight on or off.
   final VoidCallback? onToggleHighSun;
   final DateTime Function() clock;
@@ -79,6 +96,13 @@ class _RecordScreenState extends State<RecordScreen>
   Timer? _ticker;
   bool _busy = false;
 
+  /// The destination of the journey shown, and the way there.
+  StreamSubscription<RouteRow?>? _routeWatch;
+  int? _routeJourney;
+  RouteRow? _route;
+  RouteError? _routeWhy;
+  bool _planning = false;
+
   /// Android facts, refreshed on start and whenever the user comes back
   /// (they may have changed a setting meanwhile).
   bool? _notificationsShown;
@@ -95,8 +119,10 @@ class _RecordScreenState extends State<RecordScreen>
     _changes = widget.recorder.changes.listen((state) {
       setState(() => _state = state);
       _syncTicker();
+      _followRoute(state);
     });
     _syncTicker();
+    _followRoute(_state);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshSystem());
   }
@@ -106,6 +132,7 @@ class _RecordScreenState extends State<RecordScreen>
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     unawaited(_changes.cancel());
+    unawaited(_routeWatch?.cancel());
     super.dispose();
   }
 
@@ -214,6 +241,110 @@ class _RecordScreenState extends State<RecordScreen>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Watches the destination of the journey shown. A destination chosen
+  /// before the start goes with the new journey.
+  void _followRoute(RecorderState state) {
+    final planner = widget.planner;
+    if (planner == null) return;
+    final journey = switch (state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey,
+      Idle() => null,
+    };
+    if (journey?.id != _routeJourney) {
+      _routeJourney = journey?.id;
+      unawaited(_routeWatch?.cancel());
+      _routeWatch = null;
+      _route = null;
+      _routeWhy = null;
+      if (journey != null) {
+        final pending = planner.pending.value;
+        if (pending != null) {
+          planner.pending.value = null;
+          unawaited(planner.goTo(journey.id, pending));
+        }
+        _routeWatch = planner.watch(journey.id).listen((route) {
+          if (!mounted) return;
+          setState(() => _route = route);
+          _planIfDue();
+        });
+      }
+    }
+    _planIfDue();
+  }
+
+  /// Plans the way once there is a destination and a live fix to start
+  /// from; [again] plans anew (after a straight line, say).
+  void _planIfDue({bool again = false}) {
+    final planner = widget.planner;
+    final route = _route;
+    final state = _state;
+    if (planner == null || route == null || _planning) return;
+    if (route.kind != null && !again) return;
+    if (state is! Recording) return;
+    final fix = state.latestFix;
+    if (fix == null) return;
+    _planning = true;
+    if (mounted) setState(() {});
+    unawaited(
+      planner
+          .plan(state.journey.id, (
+            fix.latitude,
+            fix.longitude,
+          ), state.journey.mode)
+          .then((why) {
+            if (mounted) setState(() => _routeWhy = why);
+          })
+          .whenComplete(() {
+            _planning = false;
+            if (mounted) setState(() {});
+          }),
+    );
+  }
+
+  /// Asks for a place to go; null when the user backs out.
+  Future<Place?> _searchPlace() async {
+    final places = widget.places;
+    final planner = widget.planner;
+    if (places == null || planner == null) return null;
+    final fix =
+        switch (_state) {
+          Recording(:final latestFix?) => latestFix,
+          Recording(:final progress) ||
+          Paused(:final progress) ||
+          Interrupted(:final progress) => progress.lastFix,
+          Idle() => null,
+        } ??
+        await widget.location.lastKnown();
+    if (!mounted) return null;
+    return Navigator.of(context).push<Place>(
+      MaterialPageRoute(
+        builder: (_) => SearchScreen(
+          search: places,
+          recent: planner.recent,
+          near: fix == null ? null : (fix.latitude, fix.longitude),
+          distances:
+              fix != null &&
+              widget.clock().difference(fix.time) <= _nearFreshFor,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _chooseDestination() async {
+    final planner = widget.planner;
+    final place = await _searchPlace();
+    if (place == null || planner == null || !mounted) return;
+    final journey = _routeJourney;
+    if (journey == null) {
+      planner.pending.value = place;
+    } else {
+      setState(() => _routeWhy = null);
+      await planner.goTo(journey, place);
+    }
   }
 
   void _open(WidgetBuilder screen) =>
@@ -340,6 +471,31 @@ class _RecordScreenState extends State<RecordScreen>
                         Paused() ||
                         Interrupted() => _Readout(state: state, now: now),
                       },
+                      if (widget.planner case final planner?
+                          when widget.places != null)
+                        switch (state) {
+                          Idle() => ValueListenableBuilder(
+                            valueListenable: planner.pending,
+                            builder: (context, pending, _) => _NextDestination(
+                              pending: pending,
+                              onSearch: _chooseDestination,
+                              onClear: () => planner.pending.value = null,
+                            ),
+                          ),
+                          _ => _DestinationLine(
+                            route: _route,
+                            why: _routeWhy,
+                            planning: _planning,
+                            onSearch: _chooseDestination,
+                            onClear: () {
+                              final journey = _routeJourney;
+                              if (journey != null) {
+                                unawaited(planner.clear(journey));
+                              }
+                            },
+                            onRetry: () => _planIfDue(again: true),
+                          ),
+                        },
                       const SizedBox(height: 12),
                       _StatusLine(
                         state: state,
@@ -653,6 +809,174 @@ class _Readout extends StatelessWidget {
       latestFix.speed,
     _ => null,
   };
+}
+
+/// Before a trip: where it will go, or a way to choose.
+class _NextDestination extends StatelessWidget {
+  const _NextDestination({
+    required this.pending,
+    required this.onSearch,
+    required this.onClear,
+  });
+
+  final Place? pending;
+  final VoidCallback onSearch;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = this.pending;
+    if (pending == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: OutlinedButton.icon(
+          onPressed: onSearch,
+          icon: const Icon(Icons.search),
+          label: const Text('Search a place'),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: _DestinationCard(
+        title: 'To ${pending.name}',
+        subtitle: pending.detail ?? 'The way is planned once you start.',
+        onSearch: onSearch,
+        onClear: onClear,
+      ),
+    );
+  }
+}
+
+/// During a trip: where it is going and how far, in plain words. A straight
+/// line says it is one.
+class _DestinationLine extends StatelessWidget {
+  const _DestinationLine({
+    required this.route,
+    required this.why,
+    required this.planning,
+    required this.onSearch,
+    required this.onClear,
+    required this.onRetry,
+  });
+
+  final RouteRow? route;
+  final RouteError? why;
+  final bool planning;
+  final VoidCallback onSearch;
+  final VoidCallback onClear;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final route = this.route;
+    if (route == null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: onSearch,
+          icon: const Icon(Icons.search),
+          label: const Text('Set a destination'),
+        ),
+      );
+    }
+    final meters = route.meters;
+    final seconds = route.seconds;
+    final (subtitle, retry) = switch (route.kind) {
+      _ when planning => ('Planning the way…', false),
+      null => ('The way is planned at the first GPS fix.', false),
+      RouteKind.road => (
+        '${kilometres(meters ?? 0)} by road'
+            '${seconds == null ? '' : ' · ${_roughly(seconds)}'}',
+        false,
+      ),
+      RouteKind.straight => (
+        '${kilometres(meters ?? 0)} in a straight line, not by road. '
+            '${why?.message ?? 'No road route was found.'}',
+        true,
+      ),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: _DestinationCard(
+        title: 'To ${route.destination}',
+        subtitle: subtitle,
+        onSearch: onSearch,
+        onClear: onClear,
+        action: retry ? (label: 'Try again', onPressed: onRetry) : null,
+      ),
+    );
+  }
+
+  /// "about 25 min", "about 2 h 10 min": a service's estimate, not a
+  /// promise.
+  static String _roughly(double seconds) {
+    final minutes = (seconds / 60).round();
+    if (minutes < 1) return 'under a minute';
+    if (minutes < 60) return 'about $minutes min';
+    return 'about ${minutes ~/ 60} h ${minutes % 60} min';
+  }
+}
+
+class _DestinationCard extends StatelessWidget {
+  const _DestinationCard({
+    required this.title,
+    required this.subtitle,
+    required this.onSearch,
+    required this.onClear,
+    this.action,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onSearch;
+  final VoidCallback onClear;
+  final _Action? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(Icons.flag_circle_outlined, color: scheme.secondary),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: text.titleMedium),
+              Text(
+                subtitle,
+                style: text.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              if (action case final action?)
+                TextButton(
+                  onPressed: action.onPressed,
+                  child: Text(action.label),
+                ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: onSearch,
+          icon: const Icon(Icons.edit_location_alt_outlined),
+          tooltip: 'Change destination',
+        ),
+        IconButton(
+          onPressed: onClear,
+          icon: const Icon(Icons.close),
+          tooltip: 'No destination',
+        ),
+      ],
+    );
+  }
 }
 
 /// Says so when the journey is inside an area saved for offline use: the

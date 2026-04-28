@@ -2302,6 +2302,1075 @@ class WaypointsCompanion extends UpdateCompanion<WaypointRow> {
   }
 }
 
+class Routes extends Table with TableInfo<Routes, RouteRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  Routes(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _journeyIdMeta = const VerificationMeta(
+    'journeyId',
+  );
+  late final GeneratedColumn<int> journeyId = GeneratedColumn<int>(
+    'journey_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL PRIMARY KEY REFERENCES journeys(id)ON DELETE CASCADE',
+  );
+  static const VerificationMeta _destinationMeta = const VerificationMeta(
+    'destination',
+  );
+  late final GeneratedColumn<String> destination = GeneratedColumn<String>(
+    'destination',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  static const VerificationMeta _destinationDetailMeta = const VerificationMeta(
+    'destinationDetail',
+  );
+  late final GeneratedColumn<String> destinationDetail =
+      GeneratedColumn<String>(
+        'destination_detail',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: '',
+      );
+  static const VerificationMeta _latitudeMeta = const VerificationMeta(
+    'latitude',
+  );
+  late final GeneratedColumn<double> latitude = GeneratedColumn<double>(
+    'latitude',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  static const VerificationMeta _longitudeMeta = const VerificationMeta(
+    'longitude',
+  );
+  late final GeneratedColumn<double> longitude = GeneratedColumn<double>(
+    'longitude',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumnWithTypeConverter<RouteKind?, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: '',
+      ).withConverter<RouteKind?>(Routes.$converterkindn);
+  static const VerificationMeta _providerMeta = const VerificationMeta(
+    'provider',
+  );
+  late final GeneratedColumn<String> provider = GeneratedColumn<String>(
+    'provider',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  late final GeneratedColumnWithTypeConverter<DateTime?, int> computedAt =
+      GeneratedColumn<int>(
+        'computed_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        $customConstraints: '',
+      ).withConverter<DateTime?>(Routes.$convertercomputedAtn);
+  static const VerificationMeta _metersMeta = const VerificationMeta('meters');
+  late final GeneratedColumn<double> meters = GeneratedColumn<double>(
+    'meters',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _secondsMeta = const VerificationMeta(
+    'seconds',
+  );
+  late final GeneratedColumn<double> seconds = GeneratedColumn<double>(
+    'seconds',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _geometryMeta = const VerificationMeta(
+    'geometry',
+  );
+  late final GeneratedColumn<String> geometry = GeneratedColumn<String>(
+    'geometry',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    journeyId,
+    destination,
+    destinationDetail,
+    latitude,
+    longitude,
+    kind,
+    provider,
+    computedAt,
+    meters,
+    seconds,
+    geometry,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'routes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RouteRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('journey_id')) {
+      context.handle(
+        _journeyIdMeta,
+        journeyId.isAcceptableOrUnknown(data['journey_id']!, _journeyIdMeta),
+      );
+    }
+    if (data.containsKey('destination')) {
+      context.handle(
+        _destinationMeta,
+        destination.isAcceptableOrUnknown(
+          data['destination']!,
+          _destinationMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_destinationMeta);
+    }
+    if (data.containsKey('destination_detail')) {
+      context.handle(
+        _destinationDetailMeta,
+        destinationDetail.isAcceptableOrUnknown(
+          data['destination_detail']!,
+          _destinationDetailMeta,
+        ),
+      );
+    }
+    if (data.containsKey('latitude')) {
+      context.handle(
+        _latitudeMeta,
+        latitude.isAcceptableOrUnknown(data['latitude']!, _latitudeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latitudeMeta);
+    }
+    if (data.containsKey('longitude')) {
+      context.handle(
+        _longitudeMeta,
+        longitude.isAcceptableOrUnknown(data['longitude']!, _longitudeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_longitudeMeta);
+    }
+    if (data.containsKey('provider')) {
+      context.handle(
+        _providerMeta,
+        provider.isAcceptableOrUnknown(data['provider']!, _providerMeta),
+      );
+    }
+    if (data.containsKey('meters')) {
+      context.handle(
+        _metersMeta,
+        meters.isAcceptableOrUnknown(data['meters']!, _metersMeta),
+      );
+    }
+    if (data.containsKey('seconds')) {
+      context.handle(
+        _secondsMeta,
+        seconds.isAcceptableOrUnknown(data['seconds']!, _secondsMeta),
+      );
+    }
+    if (data.containsKey('geometry')) {
+      context.handle(
+        _geometryMeta,
+        geometry.isAcceptableOrUnknown(data['geometry']!, _geometryMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {journeyId};
+  @override
+  RouteRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RouteRow(
+      journeyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journey_id'],
+      )!,
+      destination: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}destination'],
+      )!,
+      destinationDetail: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}destination_detail'],
+      ),
+      latitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}latitude'],
+      )!,
+      longitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}longitude'],
+      )!,
+      kind: Routes.$converterkindn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        ),
+      ),
+      provider: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}provider'],
+      ),
+      computedAt: Routes.$convertercomputedAtn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}computed_at'],
+        ),
+      ),
+      meters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}meters'],
+      ),
+      seconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}seconds'],
+      ),
+      geometry: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}geometry'],
+      ),
+    );
+  }
+
+  @override
+  Routes createAlias(String alias) {
+    return Routes(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<RouteKind, String, String> $converterkind =
+      const RouteKindByName();
+  static JsonTypeConverter2<RouteKind?, String?, String?> $converterkindn =
+      JsonTypeConverter2.asNullable($converterkind);
+  static TypeConverter<DateTime, int> $convertercomputedAt = const UtcMillis();
+  static TypeConverter<DateTime?, int?> $convertercomputedAtn =
+      NullAwareTypeConverter.wrap($convertercomputedAt);
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class RouteRow extends DataClass implements Insertable<RouteRow> {
+  final int journeyId;
+  final String destination;
+  final String? destinationDetail;
+  final double latitude;
+  final double longitude;
+
+  /// Stored by name (see waypoints.kind).
+  final RouteKind? kind;
+  final String? provider;
+  final DateTime? computedAt;
+  final double? meters;
+  final double? seconds;
+
+  /// The line, as a polyline with six decimals.
+  final String? geometry;
+  const RouteRow({
+    required this.journeyId,
+    required this.destination,
+    this.destinationDetail,
+    required this.latitude,
+    required this.longitude,
+    this.kind,
+    this.provider,
+    this.computedAt,
+    this.meters,
+    this.seconds,
+    this.geometry,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['journey_id'] = Variable<int>(journeyId);
+    map['destination'] = Variable<String>(destination);
+    if (!nullToAbsent || destinationDetail != null) {
+      map['destination_detail'] = Variable<String>(destinationDetail);
+    }
+    map['latitude'] = Variable<double>(latitude);
+    map['longitude'] = Variable<double>(longitude);
+    if (!nullToAbsent || kind != null) {
+      map['kind'] = Variable<String>(Routes.$converterkindn.toSql(kind));
+    }
+    if (!nullToAbsent || provider != null) {
+      map['provider'] = Variable<String>(provider);
+    }
+    if (!nullToAbsent || computedAt != null) {
+      map['computed_at'] = Variable<int>(
+        Routes.$convertercomputedAtn.toSql(computedAt),
+      );
+    }
+    if (!nullToAbsent || meters != null) {
+      map['meters'] = Variable<double>(meters);
+    }
+    if (!nullToAbsent || seconds != null) {
+      map['seconds'] = Variable<double>(seconds);
+    }
+    if (!nullToAbsent || geometry != null) {
+      map['geometry'] = Variable<String>(geometry);
+    }
+    return map;
+  }
+
+  RoutesCompanion toCompanion(bool nullToAbsent) {
+    return RoutesCompanion(
+      journeyId: Value(journeyId),
+      destination: Value(destination),
+      destinationDetail: destinationDetail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(destinationDetail),
+      latitude: Value(latitude),
+      longitude: Value(longitude),
+      kind: kind == null && nullToAbsent ? const Value.absent() : Value(kind),
+      provider: provider == null && nullToAbsent
+          ? const Value.absent()
+          : Value(provider),
+      computedAt: computedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(computedAt),
+      meters: meters == null && nullToAbsent
+          ? const Value.absent()
+          : Value(meters),
+      seconds: seconds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(seconds),
+      geometry: geometry == null && nullToAbsent
+          ? const Value.absent()
+          : Value(geometry),
+    );
+  }
+
+  factory RouteRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RouteRow(
+      journeyId: serializer.fromJson<int>(json['journey_id']),
+      destination: serializer.fromJson<String>(json['destination']),
+      destinationDetail: serializer.fromJson<String?>(
+        json['destination_detail'],
+      ),
+      latitude: serializer.fromJson<double>(json['latitude']),
+      longitude: serializer.fromJson<double>(json['longitude']),
+      kind: Routes.$converterkindn.fromJson(
+        serializer.fromJson<String?>(json['kind']),
+      ),
+      provider: serializer.fromJson<String?>(json['provider']),
+      computedAt: serializer.fromJson<DateTime?>(json['computed_at']),
+      meters: serializer.fromJson<double?>(json['meters']),
+      seconds: serializer.fromJson<double?>(json['seconds']),
+      geometry: serializer.fromJson<String?>(json['geometry']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'journey_id': serializer.toJson<int>(journeyId),
+      'destination': serializer.toJson<String>(destination),
+      'destination_detail': serializer.toJson<String?>(destinationDetail),
+      'latitude': serializer.toJson<double>(latitude),
+      'longitude': serializer.toJson<double>(longitude),
+      'kind': serializer.toJson<String?>(Routes.$converterkindn.toJson(kind)),
+      'provider': serializer.toJson<String?>(provider),
+      'computed_at': serializer.toJson<DateTime?>(computedAt),
+      'meters': serializer.toJson<double?>(meters),
+      'seconds': serializer.toJson<double?>(seconds),
+      'geometry': serializer.toJson<String?>(geometry),
+    };
+  }
+
+  RouteRow copyWith({
+    int? journeyId,
+    String? destination,
+    Value<String?> destinationDetail = const Value.absent(),
+    double? latitude,
+    double? longitude,
+    Value<RouteKind?> kind = const Value.absent(),
+    Value<String?> provider = const Value.absent(),
+    Value<DateTime?> computedAt = const Value.absent(),
+    Value<double?> meters = const Value.absent(),
+    Value<double?> seconds = const Value.absent(),
+    Value<String?> geometry = const Value.absent(),
+  }) => RouteRow(
+    journeyId: journeyId ?? this.journeyId,
+    destination: destination ?? this.destination,
+    destinationDetail: destinationDetail.present
+        ? destinationDetail.value
+        : this.destinationDetail,
+    latitude: latitude ?? this.latitude,
+    longitude: longitude ?? this.longitude,
+    kind: kind.present ? kind.value : this.kind,
+    provider: provider.present ? provider.value : this.provider,
+    computedAt: computedAt.present ? computedAt.value : this.computedAt,
+    meters: meters.present ? meters.value : this.meters,
+    seconds: seconds.present ? seconds.value : this.seconds,
+    geometry: geometry.present ? geometry.value : this.geometry,
+  );
+  RouteRow copyWithCompanion(RoutesCompanion data) {
+    return RouteRow(
+      journeyId: data.journeyId.present ? data.journeyId.value : this.journeyId,
+      destination: data.destination.present
+          ? data.destination.value
+          : this.destination,
+      destinationDetail: data.destinationDetail.present
+          ? data.destinationDetail.value
+          : this.destinationDetail,
+      latitude: data.latitude.present ? data.latitude.value : this.latitude,
+      longitude: data.longitude.present ? data.longitude.value : this.longitude,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      provider: data.provider.present ? data.provider.value : this.provider,
+      computedAt: data.computedAt.present
+          ? data.computedAt.value
+          : this.computedAt,
+      meters: data.meters.present ? data.meters.value : this.meters,
+      seconds: data.seconds.present ? data.seconds.value : this.seconds,
+      geometry: data.geometry.present ? data.geometry.value : this.geometry,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RouteRow(')
+          ..write('journeyId: $journeyId, ')
+          ..write('destination: $destination, ')
+          ..write('destinationDetail: $destinationDetail, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('kind: $kind, ')
+          ..write('provider: $provider, ')
+          ..write('computedAt: $computedAt, ')
+          ..write('meters: $meters, ')
+          ..write('seconds: $seconds, ')
+          ..write('geometry: $geometry')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    journeyId,
+    destination,
+    destinationDetail,
+    latitude,
+    longitude,
+    kind,
+    provider,
+    computedAt,
+    meters,
+    seconds,
+    geometry,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RouteRow &&
+          other.journeyId == this.journeyId &&
+          other.destination == this.destination &&
+          other.destinationDetail == this.destinationDetail &&
+          other.latitude == this.latitude &&
+          other.longitude == this.longitude &&
+          other.kind == this.kind &&
+          other.provider == this.provider &&
+          other.computedAt == this.computedAt &&
+          other.meters == this.meters &&
+          other.seconds == this.seconds &&
+          other.geometry == this.geometry);
+}
+
+class RoutesCompanion extends UpdateCompanion<RouteRow> {
+  final Value<int> journeyId;
+  final Value<String> destination;
+  final Value<String?> destinationDetail;
+  final Value<double> latitude;
+  final Value<double> longitude;
+  final Value<RouteKind?> kind;
+  final Value<String?> provider;
+  final Value<DateTime?> computedAt;
+  final Value<double?> meters;
+  final Value<double?> seconds;
+  final Value<String?> geometry;
+  const RoutesCompanion({
+    this.journeyId = const Value.absent(),
+    this.destination = const Value.absent(),
+    this.destinationDetail = const Value.absent(),
+    this.latitude = const Value.absent(),
+    this.longitude = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.provider = const Value.absent(),
+    this.computedAt = const Value.absent(),
+    this.meters = const Value.absent(),
+    this.seconds = const Value.absent(),
+    this.geometry = const Value.absent(),
+  });
+  RoutesCompanion.insert({
+    this.journeyId = const Value.absent(),
+    required String destination,
+    this.destinationDetail = const Value.absent(),
+    required double latitude,
+    required double longitude,
+    this.kind = const Value.absent(),
+    this.provider = const Value.absent(),
+    this.computedAt = const Value.absent(),
+    this.meters = const Value.absent(),
+    this.seconds = const Value.absent(),
+    this.geometry = const Value.absent(),
+  }) : destination = Value(destination),
+       latitude = Value(latitude),
+       longitude = Value(longitude);
+  static Insertable<RouteRow> custom({
+    Expression<int>? journeyId,
+    Expression<String>? destination,
+    Expression<String>? destinationDetail,
+    Expression<double>? latitude,
+    Expression<double>? longitude,
+    Expression<String>? kind,
+    Expression<String>? provider,
+    Expression<int>? computedAt,
+    Expression<double>? meters,
+    Expression<double>? seconds,
+    Expression<String>? geometry,
+  }) {
+    return RawValuesInsertable({
+      if (journeyId != null) 'journey_id': journeyId,
+      if (destination != null) 'destination': destination,
+      if (destinationDetail != null) 'destination_detail': destinationDetail,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (kind != null) 'kind': kind,
+      if (provider != null) 'provider': provider,
+      if (computedAt != null) 'computed_at': computedAt,
+      if (meters != null) 'meters': meters,
+      if (seconds != null) 'seconds': seconds,
+      if (geometry != null) 'geometry': geometry,
+    });
+  }
+
+  RoutesCompanion copyWith({
+    Value<int>? journeyId,
+    Value<String>? destination,
+    Value<String?>? destinationDetail,
+    Value<double>? latitude,
+    Value<double>? longitude,
+    Value<RouteKind?>? kind,
+    Value<String?>? provider,
+    Value<DateTime?>? computedAt,
+    Value<double?>? meters,
+    Value<double?>? seconds,
+    Value<String?>? geometry,
+  }) {
+    return RoutesCompanion(
+      journeyId: journeyId ?? this.journeyId,
+      destination: destination ?? this.destination,
+      destinationDetail: destinationDetail ?? this.destinationDetail,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      kind: kind ?? this.kind,
+      provider: provider ?? this.provider,
+      computedAt: computedAt ?? this.computedAt,
+      meters: meters ?? this.meters,
+      seconds: seconds ?? this.seconds,
+      geometry: geometry ?? this.geometry,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (journeyId.present) {
+      map['journey_id'] = Variable<int>(journeyId.value);
+    }
+    if (destination.present) {
+      map['destination'] = Variable<String>(destination.value);
+    }
+    if (destinationDetail.present) {
+      map['destination_detail'] = Variable<String>(destinationDetail.value);
+    }
+    if (latitude.present) {
+      map['latitude'] = Variable<double>(latitude.value);
+    }
+    if (longitude.present) {
+      map['longitude'] = Variable<double>(longitude.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(Routes.$converterkindn.toSql(kind.value));
+    }
+    if (provider.present) {
+      map['provider'] = Variable<String>(provider.value);
+    }
+    if (computedAt.present) {
+      map['computed_at'] = Variable<int>(
+        Routes.$convertercomputedAtn.toSql(computedAt.value),
+      );
+    }
+    if (meters.present) {
+      map['meters'] = Variable<double>(meters.value);
+    }
+    if (seconds.present) {
+      map['seconds'] = Variable<double>(seconds.value);
+    }
+    if (geometry.present) {
+      map['geometry'] = Variable<String>(geometry.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoutesCompanion(')
+          ..write('journeyId: $journeyId, ')
+          ..write('destination: $destination, ')
+          ..write('destinationDetail: $destinationDetail, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('kind: $kind, ')
+          ..write('provider: $provider, ')
+          ..write('computedAt: $computedAt, ')
+          ..write('meters: $meters, ')
+          ..write('seconds: $seconds, ')
+          ..write('geometry: $geometry')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class RecentPlaces extends Table with TableInfo<RecentPlaces, RecentPlaceRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  RecentPlaces(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY',
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  static const VerificationMeta _detailMeta = const VerificationMeta('detail');
+  late final GeneratedColumn<String> detail = GeneratedColumn<String>(
+    'detail',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _latitudeMeta = const VerificationMeta(
+    'latitude',
+  );
+  late final GeneratedColumn<double> latitude = GeneratedColumn<double>(
+    'latitude',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  static const VerificationMeta _longitudeMeta = const VerificationMeta(
+    'longitude',
+  );
+  late final GeneratedColumn<double> longitude = GeneratedColumn<double>(
+    'longitude',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> usedAt =
+      GeneratedColumn<int>(
+        'used_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      ).withConverter<DateTime>(RecentPlaces.$converterusedAt);
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    detail,
+    latitude,
+    longitude,
+    usedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'recent_places';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RecentPlaceRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('detail')) {
+      context.handle(
+        _detailMeta,
+        detail.isAcceptableOrUnknown(data['detail']!, _detailMeta),
+      );
+    }
+    if (data.containsKey('latitude')) {
+      context.handle(
+        _latitudeMeta,
+        latitude.isAcceptableOrUnknown(data['latitude']!, _latitudeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_latitudeMeta);
+    }
+    if (data.containsKey('longitude')) {
+      context.handle(
+        _longitudeMeta,
+        longitude.isAcceptableOrUnknown(data['longitude']!, _longitudeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_longitudeMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RecentPlaceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RecentPlaceRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      detail: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}detail'],
+      ),
+      latitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}latitude'],
+      )!,
+      longitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}longitude'],
+      )!,
+      usedAt: RecentPlaces.$converterusedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}used_at'],
+        )!,
+      ),
+    );
+  }
+
+  @override
+  RecentPlaces createAlias(String alias) {
+    return RecentPlaces(attachedDatabase, alias);
+  }
+
+  static TypeConverter<DateTime, int> $converterusedAt = const UtcMillis();
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class RecentPlaceRow extends DataClass implements Insertable<RecentPlaceRow> {
+  final int id;
+  final String name;
+  final String? detail;
+  final double latitude;
+  final double longitude;
+  final DateTime usedAt;
+  const RecentPlaceRow({
+    required this.id,
+    required this.name,
+    this.detail,
+    required this.latitude,
+    required this.longitude,
+    required this.usedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || detail != null) {
+      map['detail'] = Variable<String>(detail);
+    }
+    map['latitude'] = Variable<double>(latitude);
+    map['longitude'] = Variable<double>(longitude);
+    {
+      map['used_at'] = Variable<int>(
+        RecentPlaces.$converterusedAt.toSql(usedAt),
+      );
+    }
+    return map;
+  }
+
+  RecentPlacesCompanion toCompanion(bool nullToAbsent) {
+    return RecentPlacesCompanion(
+      id: Value(id),
+      name: Value(name),
+      detail: detail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(detail),
+      latitude: Value(latitude),
+      longitude: Value(longitude),
+      usedAt: Value(usedAt),
+    );
+  }
+
+  factory RecentPlaceRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RecentPlaceRow(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      detail: serializer.fromJson<String?>(json['detail']),
+      latitude: serializer.fromJson<double>(json['latitude']),
+      longitude: serializer.fromJson<double>(json['longitude']),
+      usedAt: serializer.fromJson<DateTime>(json['used_at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'detail': serializer.toJson<String?>(detail),
+      'latitude': serializer.toJson<double>(latitude),
+      'longitude': serializer.toJson<double>(longitude),
+      'used_at': serializer.toJson<DateTime>(usedAt),
+    };
+  }
+
+  RecentPlaceRow copyWith({
+    int? id,
+    String? name,
+    Value<String?> detail = const Value.absent(),
+    double? latitude,
+    double? longitude,
+    DateTime? usedAt,
+  }) => RecentPlaceRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    detail: detail.present ? detail.value : this.detail,
+    latitude: latitude ?? this.latitude,
+    longitude: longitude ?? this.longitude,
+    usedAt: usedAt ?? this.usedAt,
+  );
+  RecentPlaceRow copyWithCompanion(RecentPlacesCompanion data) {
+    return RecentPlaceRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      detail: data.detail.present ? data.detail.value : this.detail,
+      latitude: data.latitude.present ? data.latitude.value : this.latitude,
+      longitude: data.longitude.present ? data.longitude.value : this.longitude,
+      usedAt: data.usedAt.present ? data.usedAt.value : this.usedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecentPlaceRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('detail: $detail, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('usedAt: $usedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, detail, latitude, longitude, usedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RecentPlaceRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.detail == this.detail &&
+          other.latitude == this.latitude &&
+          other.longitude == this.longitude &&
+          other.usedAt == this.usedAt);
+}
+
+class RecentPlacesCompanion extends UpdateCompanion<RecentPlaceRow> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String?> detail;
+  final Value<double> latitude;
+  final Value<double> longitude;
+  final Value<DateTime> usedAt;
+  const RecentPlacesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.detail = const Value.absent(),
+    this.latitude = const Value.absent(),
+    this.longitude = const Value.absent(),
+    this.usedAt = const Value.absent(),
+  });
+  RecentPlacesCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.detail = const Value.absent(),
+    required double latitude,
+    required double longitude,
+    required DateTime usedAt,
+  }) : name = Value(name),
+       latitude = Value(latitude),
+       longitude = Value(longitude),
+       usedAt = Value(usedAt);
+  static Insertable<RecentPlaceRow> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? detail,
+    Expression<double>? latitude,
+    Expression<double>? longitude,
+    Expression<int>? usedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (detail != null) 'detail': detail,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (usedAt != null) 'used_at': usedAt,
+    });
+  }
+
+  RecentPlacesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String?>? detail,
+    Value<double>? latitude,
+    Value<double>? longitude,
+    Value<DateTime>? usedAt,
+  }) {
+    return RecentPlacesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      detail: detail ?? this.detail,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      usedAt: usedAt ?? this.usedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (detail.present) {
+      map['detail'] = Variable<String>(detail.value);
+    }
+    if (latitude.present) {
+      map['latitude'] = Variable<double>(latitude.value);
+    }
+    if (longitude.present) {
+      map['longitude'] = Variable<double>(longitude.value);
+    }
+    if (usedAt.present) {
+      map['used_at'] = Variable<int>(
+        RecentPlaces.$converterusedAt.toSql(usedAt.value),
+      );
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecentPlacesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('detail: $detail, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('usedAt: $usedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$JourneyStore extends GeneratedDatabase {
   _$JourneyStore(QueryExecutor e) : super(e);
   late final Journeys journeys = Journeys(this);
@@ -2316,6 +3385,8 @@ abstract class _$JourneyStore extends GeneratedDatabase {
     'waypoints_by_journey',
     'CREATE INDEX IF NOT EXISTS waypoints_by_journey ON waypoints (journey_id)',
   );
+  late final Routes routes = Routes(this);
+  late final RecentPlaces recentPlaces = RecentPlaces(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2327,6 +3398,8 @@ abstract class _$JourneyStore extends GeneratedDatabase {
     trackPoints,
     waypoints,
     waypointsByJourney,
+    routes,
+    recentPlaces,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -2350,6 +3423,13 @@ abstract class _$JourneyStore extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('waypoints', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'journeys',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('routes', kind: UpdateKind.delete)],
     ),
   ]);
 }

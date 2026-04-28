@@ -97,6 +97,22 @@ class GeolocatorLocation implements LocationSource {
     return fixes.stream;
   }
 
+  @override
+  Future<Fix?> lastKnown() async {
+    if (accessFrom(await Geolocator.checkPermission()) !=
+        LocationAccess.granted) {
+      return null;
+    }
+    try {
+      final position = await Geolocator.getLastKnownPosition();
+      return position == null ? null : fixFrom(position);
+    } on PermissionDeniedException {
+      return null;
+    } on LocationServiceDisabledException {
+      return null;
+    }
+  }
+
   /// One fix per second on the road, every two seconds on foot. Never a
   /// cached position from before the request (`maxUpdateAge: zero`).
   ///

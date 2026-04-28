@@ -26,6 +26,9 @@ class FakeLocation implements LocationSource {
 
   bool get listening => _fixes?.hasListener ?? false;
 
+  /// What [lastKnown] answers.
+  Fix? known;
+
   @override
   Future<LocationAccess> requestAccess() async {
     requests++;
@@ -41,6 +44,9 @@ class FakeLocation implements LocationSource {
   @override
   Stream<Fix> watch(JourneyMode mode) =>
       (_fixes = StreamController(sync: true)).stream;
+
+  @override
+  Future<Fix?> lastKnown() async => known;
 
   void emit(Fix fix) => _fixes!.add(fix);
 

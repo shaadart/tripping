@@ -26,8 +26,11 @@ import 'map/offline_maps.dart';
 import 'map/track_map.dart';
 import 'recording/geolocator_location.dart';
 import 'recording/location_source.dart';
+import 'places/place_search.dart';
 import 'recording/raw_fix_log.dart';
 import 'recording/recorder.dart';
+import 'routing/route_planner.dart';
+import 'routing/router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,12 +78,16 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
       location = RawFixLog(location, File('${documents.path}/raw_fixes.jsonl'));
     }
     final recorder = await Recorder.open(store, location);
+    // Open-source search and routing over OpenStreetMap (D-026).
+    final planner = RoutePlanner(store, ValhallaRouter());
     return RecordScreen(
       recorder: recorder,
       location: location,
       system: const ChannelSystemAccess(),
       mapBuilder: (state, now) =>
-          JourneyMap(state: state, store: store, now: now),
+          JourneyMap(state: state, store: store, now: now, planner: planner),
+      places: PhotonSearch(),
+      planner: planner,
       waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
       savedOffline: offline.saved,
