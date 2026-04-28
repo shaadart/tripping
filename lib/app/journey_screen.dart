@@ -18,7 +18,9 @@ class JourneyScreen extends StatefulWidget {
 
   final PastJourney past;
   final JourneyHistory history;
-  final Widget Function(List<List<Fix>> track) trackMapBuilder;
+
+  /// Builds the map; the track is null while it loads.
+  final Widget Function(List<List<Fix>>? track) trackMapBuilder;
 
   /// Hands the journey to other apps as GPX.
   final Future<void> Function(PastJourney past)? onExport;
@@ -103,11 +105,8 @@ class _JourneyScreenState extends State<JourneyScreen> {
                     child: Text("Couldn't read the track: ${snapshot.error}"),
                   );
                 }
-                final track = snapshot.data;
-                if (track == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                return widget.trackMapBuilder(track);
+                // Built at once, so the map loads while the track does.
+                return widget.trackMapBuilder(snapshot.data);
               },
             ),
           ),

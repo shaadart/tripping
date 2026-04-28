@@ -17,7 +17,22 @@ double metersBetween(double lat1, double lon1, double lat2, double lon2) {
   return 2 * earthRadius * asin(sqrt(min(1.0, h)));
 }
 
+/// Initial great-circle bearing from the first point to the second, in
+/// degrees clockwise from north, 0 to 360.
+double bearingBetween(double lat1, double lon1, double lat2, double lon2) {
+  const toRadians = pi / 180;
+  final phi1 = lat1 * toRadians;
+  final phi2 = lat2 * toRadians;
+  final dLon = (lon2 - lon1) * toRadians;
+  final y = sin(dLon) * cos(phi2);
+  final x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dLon);
+  return (atan2(y, x) / toRadians + 360) % 360;
+}
+
 extension FixGeometry on Fix {
   double metersTo(Fix other) =>
       metersBetween(latitude, longitude, other.latitude, other.longitude);
+
+  double bearingTo(Fix other) =>
+      bearingBetween(latitude, longitude, other.latitude, other.longitude);
 }

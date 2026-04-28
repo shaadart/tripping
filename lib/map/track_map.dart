@@ -8,10 +8,18 @@ import 'track_geometry.dart';
 
 /// A past journey on the map: its track, one line per segment, with where it
 /// began and ended, framed to fit.
+///
+/// The map is created before the track has loaded, so its style loads at the
+/// same time; a cover hides it until the track is drawn and framed.
 class TrackMap extends StatefulWidget {
-  const TrackMap({super.key, required this.track});
+  const TrackMap({super.key, required this.track, this.onDrawn});
 
-  final List<List<Fix>> track;
+  /// Null while it is still loading.
+  final List<List<Fix>>? track;
+
+  /// Called once the track is on the map, with the time since this widget
+  /// was created.
+  final void Function(Duration sinceCreated)? onDrawn;
 
   @override
   State<TrackMap> createState() => _TrackMapState();
@@ -19,14 +27,32 @@ class TrackMap extends StatefulWidget {
 
 class _TrackMapState extends State<TrackMap> {
   MapLibreMapController? _map;
+  final _age = Stopwatch()..start();
+  bool _styleLoaded = false;
+  bool _drawing = false;
+  bool _drawn = false;
 
-  Future<void> _onStyleLoaded() async {
+  @override
+  void didUpdateWidget(TrackMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _draw();
+  }
+
+  void _onStyleLoaded() {
+    _styleLoaded = true;
+    _draw();
+  }
+
+  Future<void> _draw() async {
     final map = _map;
-    if (map == null || !mounted) return;
+    final track = widget.track;
+    if (!mounted || map == null || track == null || !_styleLoaded) return;
+    if (_drawing) return;
+    _drawing = true;
     final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
-    await map.addGeoJsonSource('track', trackFeatures(widget.track));
+    await map.addGeoJsonSource('track', trackFeatures(track));
     await map.addLineLayer('track', 'track-line', trackLine(ember));
-    await map.addGeoJsonSource('ends', endsFeatures(widget.track));
+    await map.addGeoJsonSource('ends', endsFeatures(track));
     await map.addCircleLayer(
       'ends',
       'ends',
@@ -45,28 +71,37 @@ class _TrackMapState extends State<TrackMap> {
     );
     await fitCamera(
       map,
-      widget.track,
+      track,
       padding: const EdgeInsets.fromLTRB(40, 40, 40, 40),
     );
+    widget.onDrawn?.call(_age.elapsed);
+    if (mounted) setState(() => _drawn = true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final box = boundsOf(widget.track);
-    return MapLibreMap(
-      styleString: mapStyleFor(context),
-      // Start over the track, not the whole world, so nothing flashes.
-      initialCameraPosition: CameraPosition(
-        target: box == null
-            ? const LatLng(20, 0)
-            : LatLng((box.south + box.north) / 2, (box.west + box.east) / 2),
-        zoom: box == null ? 1 : 13,
-      ),
-      onMapCreated: (map) => _map = map,
-      onStyleLoadedCallback: _onStyleLoaded,
-      tiltGesturesEnabled: false,
-      rotateGesturesEnabled: false,
-      attributionButtonPosition: AttributionButtonPosition.bottomRight,
+    return Stack(
+      children: [
+        MapLibreMap(
+          styleString: mapStyleFor(context),
+          initialCameraPosition: const CameraPosition(
+            target: LatLng(20, 0),
+            zoom: 1,
+          ),
+          onMapCreated: (map) => _map = map,
+          onStyleLoadedCallback: _onStyleLoaded,
+          tiltGesturesEnabled: false,
+          rotateGesturesEnabled: false,
+          attributionButtonPosition: AttributionButtonPosition.bottomRight,
+        ),
+        if (!_drawn)
+          Positioned.fill(
+            child: ColoredBox(
+              color: Theme.of(context).colorScheme.surface,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -1,11 +1,13 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:sqlite3/sqlite3.dart' show Database;
+import 'package:sqlite3/sqlite3.dart' show Database, OpenMode, sqlite3;
 import 'package:uuid/uuid.dart';
 
 import 'journey.dart';
+import 'simplify.dart';
 
 part 'journey_store.g.dart';
 
@@ -33,13 +35,20 @@ enum AppendResult {
 ///   [recoverInterrupted] turns that into an honest, closed segment.
 @DriftDatabase(include: {'schema.drift'})
 class JourneyStore extends _$JourneyStore {
-  JourneyStore(super.executor);
+  JourneyStore(super.executor) : _file = null;
+
+  JourneyStore._file(super.executor, this._file);
 
   /// Opens the database in [file] on a background isolate, so disk I/O never
   /// blocks the UI isolate.
-  factory JourneyStore.file(File file) => JourneyStore(
+  factory JourneyStore.file(File file) => JourneyStore._file(
     NativeDatabase.createInBackground(file, setup: _configureConnection),
+    file,
   );
+
+  /// The database file, when there is one: long tracks are read from it on
+  /// a separate isolate.
+  final File? _file;
 
   static void _configureConnection(Database db) {
     db.execute('PRAGMA journal_mode = WAL');
@@ -270,7 +279,24 @@ class JourneyStore extends _$JourneyStore {
   /// The recorded track, one time-ordered list of fixes per segment. The
   /// outer list is indexed by segment number; a segment without fixes yields
   /// an empty list.
-  Future<List<List<Fix>>> track(int journeyId) async {
+  ///
+  /// A file-backed store reads on a separate isolate over its own read-only
+  /// connection (WAL lets it read beside the writer), and hands the result
+  /// back without copying: a day of fixes never blocks the UI isolate.
+  Future<List<List<Fix>>> track(int journeyId) => simplifiedTrack(journeyId);
+
+  /// [track], with fixes that stray less than [tolerance] metres from the
+  /// simplified line dropped on the reading isolate (see `simplify`). No
+  /// tolerance keeps every fix.
+  Future<List<List<Fix>>> simplifiedTrack(
+    int journeyId, {
+    double? tolerance,
+  }) async {
+    final file = _file;
+    if (file != null) {
+      final path = file.path;
+      return Isolate.run(() => _readTrack(path, journeyId, tolerance));
+    }
     final segmentCount = (await segmentsOf(journeyId)).length;
     final track = List.generate(segmentCount, (_) => <Fix>[]);
     final rows =
@@ -292,7 +318,7 @@ class JourneyStore extends _$JourneyStore {
         ),
       );
     }
-    return track;
+    return _simplified(track, tolerance);
   }
 
   /// Deletes an inactive journey with all of its segments and fixes.
@@ -326,4 +352,57 @@ class JourneyStore extends _$JourneyStore {
       (update(journeys)..where((j) => j.id.equals(journeyId))).write(
         JourneysCompanion(status: Value(status)),
       );
+}
+
+List<List<Fix>> _simplified(List<List<Fix>> track, double? tolerance) =>
+    tolerance == null
+    ? track
+    : [for (final segment in track) simplify(segment, tolerance)];
+
+/// Reads a journey's track straight from the database file. Runs on its own
+/// isolate; the columns match the `track_points` table.
+List<List<Fix>> _readTrack(String path, int journeyId, double? tolerance) {
+  final db = sqlite3.open(path, mode: OpenMode.readOnly);
+  try {
+    final segmentCount =
+        db
+                .select('SELECT COUNT(*) FROM segments WHERE journey_id = ?', [
+                  journeyId,
+                ])
+                .single
+                .columnAt(0)
+            as int;
+    final track = List.generate(segmentCount, (_) => <Fix>[]);
+    final statement = db.prepare(
+      'SELECT segment, time, latitude, longitude, accuracy, altitude, '
+      'altitude_accuracy, speed, heading FROM track_points '
+      'WHERE journey_id = ? ORDER BY time',
+    );
+    try {
+      final rows = statement.selectCursor([journeyId]);
+      while (rows.moveNext()) {
+        final row = rows.current;
+        track[row.columnAt(0) as int].add(
+          Fix(
+            time: DateTime.fromMillisecondsSinceEpoch(
+              row.columnAt(1) as int,
+              isUtc: true,
+            ),
+            latitude: row.columnAt(2) as double,
+            longitude: row.columnAt(3) as double,
+            accuracy: (row.columnAt(4) as num?)?.toDouble(),
+            altitude: (row.columnAt(5) as num?)?.toDouble(),
+            altitudeAccuracy: (row.columnAt(6) as num?)?.toDouble(),
+            speed: (row.columnAt(7) as num?)?.toDouble(),
+            heading: (row.columnAt(8) as num?)?.toDouble(),
+          ),
+        );
+      }
+    } finally {
+      statement.close();
+    }
+    return _simplified(track, tolerance);
+  } finally {
+    db.close();
+  }
 }

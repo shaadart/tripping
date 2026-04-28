@@ -74,7 +74,7 @@ void main() {
         home: HistoryScreen(
           history: history,
           trackMapBuilder: (track) {
-            drawn.add(track);
+            if (track != null) drawn.add(track);
             return const SizedBox.expand();
           },
           onExport: onExport,

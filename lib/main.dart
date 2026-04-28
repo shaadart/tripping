@@ -10,6 +10,7 @@ import 'app/record_screen.dart';
 import 'app/share_gpx.dart';
 import 'app/system_access.dart';
 import 'app/theme.dart';
+import 'bench/long_journey_bench.dart';
 import 'history/journey_history.dart';
 import 'journey/journey_store.dart';
 import 'map/journey_map.dart';
@@ -30,7 +31,13 @@ Future<void> main() async {
 Future<Widget> _openHome() async {
   try {
     final documents = await getApplicationDocumentsDirectory();
-    final store = JourneyStore.file(File('${documents.path}/journeys.sqlite'));
+    // A bench build measures on its own database, never the owner's.
+    final file = File(
+      '${documents.path}/'
+      '${LongJourneyBench.enabled ? LongJourneyBench.databaseName : 'journeys.sqlite'}',
+    );
+    final store = JourneyStore.file(file);
+    if (LongJourneyBench.enabled) await LongJourneyBench.run(store, file);
     LocationSource location = const GeolocatorLocation();
     if (kDebugMode) {
       location = RawFixLog(location, File('${documents.path}/raw_fixes.jsonl'));
@@ -46,7 +53,12 @@ Future<Widget> _openHome() async {
         final history = JourneyHistory(store);
         return HistoryScreen(
           history: history,
-          trackMapBuilder: (track) => TrackMap(track: track),
+          trackMapBuilder: (track) => TrackMap(
+            track: track,
+            onDrawn: LongJourneyBench.enabled
+                ? LongJourneyBench.detailDrawn
+                : null,
+          ),
           onExport: (past) => shareGpx(history, past),
         );
       },

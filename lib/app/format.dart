@@ -7,7 +7,17 @@ String modeName(JourneyMode mode) => switch (mode) {
   JourneyMode.expedition => 'Expedition',
 };
 
-String kilometres(double meters) => '${(meters / 1000).toStringAsFixed(2)} km';
+/// Fewer decimals as distances grow: 10 m steps mean nothing on a 1,000 km
+/// drive, and long numbers would not fit.
+String kilometres(double meters) {
+  final km = meters / 1000;
+  final decimals = km < 10
+      ? 2
+      : km < 100
+      ? 1
+      : 0;
+  return '${km.toStringAsFixed(decimals)} km';
+}
 
 String clockTime(Duration duration) {
   final hours = duration.inHours;
@@ -31,3 +41,15 @@ String timeOfDay(BuildContext context, DateTime time) =>
 String dayAndTime(BuildContext context, DateTime time) =>
     '${MaterialLocalizations.of(context).formatMediumDate(time.toLocal())} · '
     '${timeOfDay(context, time)}';
+
+/// Speed from the GPS, or a dash when it is unknown: never a guess.
+String speedText(double? metersPerSecond) {
+  if (metersPerSecond == null) return '—';
+  final kmh = metersPerSecond * 3.6;
+  return '${kmh < 1 ? 0 : kmh.round()} km/h';
+}
+
+/// "12.97630° N, 77.59290° E": five decimals is about a metre.
+String coordinatesText(double latitude, double longitude) =>
+    '${latitude.abs().toStringAsFixed(5)}° ${latitude < 0 ? 'S' : 'N'}, '
+    '${longitude.abs().toStringAsFixed(5)}° ${longitude < 0 ? 'W' : 'E'}';

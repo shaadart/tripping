@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show Point;
 
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -33,6 +34,14 @@ const _basemapLayers = [
 /// Steps longer than this (driving speeds, at one fix a second) ease the
 /// camera; shorter ones move it at once.
 const _easeAbove = 15.0;
+
+/// Speed in m/s above which the GPS heading is trusted to turn the road
+/// camera.
+const _headingAbove = 2.0;
+
+/// Metres moved, well beyond GPS noise, before a course is taken from the
+/// positions themselves when the GPS gives no heading.
+const _courseAfter = 25.0;
 
 /// How often, at most, to check whether the basemap is blank.
 const _blankCheckEvery = Duration(seconds: 10);
@@ -74,6 +83,13 @@ class _JourneyMapState extends State<JourneyMap> {
   bool _zoomedIn = false;
   Offset? _touchStart;
   bool _blank = false;
+  JourneyMode _mode = JourneyMode.expedition;
+
+  /// The road camera's heading, kept while the GPS heading is unreliable.
+  double _bearing = 0;
+
+  /// Where the course without a GPS heading is measured from.
+  Fix? _courseFrom;
   DateTime? _blankCheckedAt;
   int _blankChecks = 0;
 
@@ -157,6 +173,8 @@ class _JourneyMapState extends State<JourneyMap> {
       _segmentStart = progress?.openSince;
       _follow = true;
       _zoomedIn = false;
+      _bearing = 0;
+      _courseFrom = null;
       await _drawHistory(map);
       await _drawTail(map);
       await _fitTrack(map);
@@ -223,18 +241,60 @@ class _JourneyMapState extends State<JourneyMap> {
     if (fix == null || identical(fix, _shownFix)) return;
     final previous = _shownFix;
     _shownFix = fix;
+    _mode = mode;
     if (state is! Recording || !_follow) return;
-    final target = LatLng(fix.latitude, fix.longitude);
+    final bearing = _bearing;
+    // On the road the map turns with the direction of travel: the heading
+    // the GPS measured at real speed (standing still, it would spin), or,
+    // without one, the way the last 25 m went.
+    if (mode == JourneyMode.road) {
+      final anchor = _courseFrom;
+      if ((fix.speed ?? 0) >= _headingAbove && fix.heading != null) {
+        _bearing = fix.heading!;
+        _courseFrom = fix;
+      } else if (anchor == null) {
+        _courseFrom = fix;
+      } else if (fix.heading == null && anchor.metersTo(fix) >= _courseAfter) {
+        _bearing = anchor.bearingTo(fix);
+        _courseFrom = fix;
+      }
+    }
+    final turned = _turn(bearing, _bearing) > 10;
     if (!_zoomedIn) {
-      await map.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      await map.animateCamera(_followView(fix));
       _zoomedIn = true;
-    } else if (previous != null && fix.metersTo(previous) < _easeAbove) {
+    } else if (previous != null &&
+        fix.metersTo(previous) < _easeAbove &&
+        !turned) {
       // A step of a few pixels looks the same either way, and an ease
       // renders dozens of frames per fix on a 120 Hz screen (E-015).
-      await map.moveCamera(CameraUpdate.newLatLng(target));
+      await map.moveCamera(_followUpdate(fix));
     } else {
-      await map.animateCamera(CameraUpdate.newLatLng(target));
+      await map.animateCamera(_followUpdate(fix));
     }
+  }
+
+  /// The follow view of the journey's kind, at street level: north up for
+  /// an expedition, heading up and tilted on the road.
+  CameraUpdate _followView(Fix fix) => CameraUpdate.newCameraPosition(
+    CameraPosition(
+      target: LatLng(fix.latitude, fix.longitude),
+      zoom: 16,
+      bearing: _mode == JourneyMode.road ? _bearing : 0,
+      tilt: _mode == JourneyMode.road ? 45 : 0,
+    ),
+  );
+
+  /// Keeps an expedition's zoom (a double tap does not stop following); on
+  /// the road the whole view follows.
+  CameraUpdate _followUpdate(Fix fix) => _mode == JourneyMode.road
+      ? _followView(fix)
+      : CameraUpdate.newLatLng(LatLng(fix.latitude, fix.longitude));
+
+  /// Degrees between two headings, either way round.
+  static double _turn(double a, double b) {
+    final d = (a - b).abs() % 360;
+    return d > 180 ? 360 - d : d;
   }
 
   Future<void> _fitTrack(MapLibreMapController map) async {
@@ -268,19 +328,13 @@ class _JourneyMapState extends State<JourneyMap> {
     if (mounted && blank != _blank) setState(() => _blank = blank);
   }
 
-  /// Back to the follow view: street level, north up.
+  /// Back to the journey's follow view.
   void _recenter() {
     setState(() => _follow = true);
     final fix = _shownFix;
     final map = _map;
     if (fix == null || map == null) return;
-    _serially(
-      () async => map.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: LatLng(fix.latitude, fix.longitude), zoom: 16),
-        ),
-      ),
-    );
+    _serially(() async => map.animateCamera(_followView(fix)));
   }
 
   @override
@@ -308,6 +362,13 @@ class _JourneyMapState extends State<JourneyMap> {
             ),
             onMapCreated: (map) => _map = map,
             onStyleLoadedCallback: _onStyleLoaded,
+            // Below the status bar, level with the header (the road view
+            // turns, so the compass shows where north is).
+            compassViewPosition: CompassViewPosition.topRight,
+            compassViewMargins: Point(
+              16,
+              MediaQuery.paddingOf(context).top + 12,
+            ),
             tiltGesturesEnabled: false,
             attributionButtonPosition: AttributionButtonPosition.bottomRight,
           ),

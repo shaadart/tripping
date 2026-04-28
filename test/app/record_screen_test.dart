@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tripping/app/record_screen.dart';
 import 'package:tripping/app/system_access.dart';
@@ -143,6 +144,74 @@ void main() {
     expect(find.text('No GPS fix for 20 s'), findsOneWidget);
     expect(find.text('0:00:20'), findsOneWidget);
     await cleanUp(tester);
+  });
+
+  group('two kinds of journey (B1)', () {
+    testWidgets('the road shows the GPS speed only while it is fresh', (
+      tester,
+    ) async {
+      await show(tester);
+      await tap(tester, 'Road journey');
+      expect(find.text('Speed'), findsOneWidget);
+      expect(find.text('Moving'), findsNothing);
+      expect(find.text('—'), findsOneWidget);
+
+      await act(
+        tester,
+        () async => location.emit(
+          Fix(
+            time: t0,
+            latitude: 32,
+            longitude: 77,
+            accuracy: 5,
+            speed: 13.9,
+            heading: 90,
+          ),
+        ),
+      );
+      expect(find.text('50 km/h'), findsOneWidget);
+
+      now = t0.add(const Duration(seconds: 6));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('—'), findsOneWidget);
+      await cleanUp(tester);
+    });
+
+    testWidgets('an expedition shows coordinates on demand, and copies them', (
+      tester,
+    ) async {
+      await show(tester);
+      await tap(tester, 'Expedition');
+      expect(find.text('Moving'), findsOneWidget);
+      expect(find.text('Speed'), findsNothing);
+      expect(find.text('Show coordinates'), findsNothing);
+
+      await act(tester, () async => location.emit(walkFix(0)));
+      expect(find.textContaining('° N'), findsNothing);
+      await tester.tap(find.text('Show coordinates'));
+      await tester.pump();
+      expect(find.text('32.00000° N, 77.00000° E ±3 m'), findsOneWidget);
+
+      final copied = <Object?>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+          return null;
+        },
+      );
+      await tester.tap(find.byTooltip('Copy coordinates'));
+      await tester.pump();
+      expect(copied, [
+        {'text': '32.00000, 77.00000'},
+      ]);
+      expect(find.text('Coordinates copied'), findsOneWidget);
+
+      now = t0.add(const Duration(seconds: 20));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('Last known:'), findsOneWidget);
+      await cleanUp(tester);
+    });
   });
 
   testWidgets('a failing save is shown, not hidden', (tester) async {

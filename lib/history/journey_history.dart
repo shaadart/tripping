@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:math';
 
 import '../journey/journey.dart';
@@ -58,10 +57,7 @@ class JourneyHistory {
   /// add nothing visible at [tolerance] metres dropped. Simplified off the
   /// UI isolate, so long journeys open without stutter.
   Future<List<List<Fix>>> trackOf(int journeyId, {double tolerance = 1}) async {
-    final track = await _store.track(journeyId);
-    return Isolate.run(
-      () => [for (final segment in track) simplify(segment, tolerance)],
-    );
+    return _store.simplifiedTrack(journeyId, tolerance: tolerance);
   }
 
   Future<void> delete(int journeyId) => _store.deleteJourney(journeyId);

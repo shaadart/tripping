@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../journey/journey.dart';
+import '../journey/journey_store.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
@@ -16,6 +18,9 @@ const _quietAfter = Duration(seconds: 15);
 
 /// Seconds after starting without any fix before the screen says so.
 const _noFixAfter = Duration(seconds: 30);
+
+/// How long a fix's speed still counts as the speed now.
+const _speedFreshFor = Duration(seconds: 5);
 
 /// One journey at a time: its numbers, one main action, and plain words
 /// about anything that is wrong. The map takes the centre in M1.
@@ -246,11 +251,9 @@ class _RecordScreenState extends State<RecordScreen>
                     children: [
                       switch (state) {
                         Idle() => const _Welcome(),
-                        Recording(:final progress) ||
-                        Paused(:final progress) ||
-                        Interrupted(
-                          :final progress,
-                        ) => _Readout(progress: progress, now: now),
+                        Recording() ||
+                        Paused() ||
+                        Interrupted() => _Readout(state: state, now: now),
                       },
                       const SizedBox(height: 12),
                       _StatusLine(
@@ -261,6 +264,7 @@ class _RecordScreenState extends State<RecordScreen>
                             .openSettingsFor(LocationAccess.serviceOff),
                         onOpenAppSettings: widget.system.openAppSettings,
                       ),
+                      _Coordinates(state: state, now: now),
                       _SystemNotes(
                         state: state,
                         restricted: _restricted,
@@ -412,27 +416,146 @@ class _Welcome extends StatelessWidget {
   }
 }
 
+/// The numbers that matter for the kind of journey: on the road, speed
+/// first; on an expedition, time and moving time.
 class _Readout extends StatelessWidget {
-  const _Readout({required this.progress, required this.now});
+  const _Readout({required this.state, required this.now});
 
-  final Progress progress;
+  final RecorderState state;
   final DateTime now;
 
   @override
   Widget build(BuildContext context) {
+    final (journey, progress) = switch (state) {
+      Recording(:final journey, :final progress) ||
+      Paused(:final journey, :final progress) ||
+      Interrupted(:final journey, :final progress) => (journey, progress),
+      Idle() => throw StateError('No journey to read out'),
+    };
+    final time = Figure(
+      value: clockTime(progress.elapsedAt(now)),
+      label: 'Time',
+    );
+    final distance = Figure(
+      value: kilometres(progress.meters),
+      label: 'Distance',
+    );
+    return Row(
+      children: [
+        for (final figure in switch (journey.mode) {
+          JourneyMode.road => [
+            Figure(value: speedText(_freshSpeed()), label: 'Speed'),
+            distance,
+            time,
+          ],
+          JourneyMode.expedition => [
+            time,
+            distance,
+            Figure(value: clockTime(progress.movingTime), label: 'Moving'),
+          ],
+        })
+          Expanded(child: figure),
+      ],
+    );
+  }
+
+  /// The GPS's own speed from a fix at most a few seconds old; anything
+  /// older is not the speed now.
+  double? _freshSpeed() => switch (state) {
+    Recording(:final latestFix?, :final latestFixArrivedAt?)
+        when now.difference(latestFixArrivedAt) <= _speedFreshFor =>
+      latestFix.speed,
+    _ => null,
+  };
+}
+
+/// On an expedition, the position as coordinates, on demand: to tell
+/// someone where you are, or to check a map. Says when it is not live.
+class _Coordinates extends StatefulWidget {
+  const _Coordinates({required this.state, required this.now});
+
+  final RecorderState state;
+  final DateTime now;
+
+  @override
+  State<_Coordinates> createState() => _CoordinatesState();
+}
+
+class _CoordinatesState extends State<_Coordinates> {
+  bool _shown = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final (fix, live) = switch (widget.state) {
+      Recording(
+        journey: JourneyRow(mode: JourneyMode.expedition),
+        :final latestFix?,
+        :final latestFixArrivedAt?,
+      ) =>
+        (latestFix, widget.now.difference(latestFixArrivedAt) <= _quietAfter),
+      Recording(
+        journey: JourneyRow(mode: JourneyMode.expedition),
+        :final progress,
+      ) ||
+      Paused(
+        journey: JourneyRow(mode: JourneyMode.expedition),
+        :final progress,
+      ) ||
+      Interrupted(
+        journey: JourneyRow(mode: JourneyMode.expedition),
+        :final progress,
+      ) => (progress.lastFix, false),
+      _ => (null, false),
+    };
+    if (fix == null) return const SizedBox.shrink();
+    if (!_shown) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () => setState(() => _shown = true),
+          icon: const Icon(Icons.my_location, size: 18),
+          label: const Text('Show coordinates'),
+        ),
+      );
+    }
+    final text = coordinatesText(fix.latitude, fix.longitude);
+    final accuracy = fix.accuracy;
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         Expanded(
-          child: Figure(
-            value: clockTime(progress.elapsedAt(now)),
-            label: 'Time',
+          child: GestureDetector(
+            onTap: () => setState(() => _shown = false),
+            child: Text(
+              [
+                if (!live) 'Last known:',
+                text,
+                if (accuracy != null) '±${accuracy.round()} m',
+              ].join(' '),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: live ? scheme.onSurface : scheme.onSurfaceVariant,
+              ),
+            ),
           ),
         ),
-        Expanded(
-          child: Figure(value: kilometres(progress.meters), label: 'Distance'),
-        ),
-        Expanded(
-          child: Figure(value: clockTime(progress.movingTime), label: 'Moving'),
+        IconButton(
+          onPressed: () async {
+            await Clipboard.setData(
+              ClipboardData(
+                text:
+                    '${fix.latitude.toStringAsFixed(5)}, '
+                    '${fix.longitude.toStringAsFixed(5)}',
+              ),
+            );
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Coordinates copied')),
+              );
+            }
+          },
+          icon: const Icon(Icons.copy, size: 20),
+          tooltip: 'Copy coordinates',
         ),
       ],
     );
