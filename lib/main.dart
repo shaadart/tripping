@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app/record_screen.dart';
+import 'app/system_access.dart';
 import 'app/theme.dart';
 import 'journey/journey_store.dart';
 import 'recording/geolocator_location.dart';
@@ -28,7 +29,11 @@ Future<Widget> _openHome() async {
       location = RawFixLog(location, File('${documents.path}/raw_fixes.jsonl'));
     }
     final recorder = await Recorder.open(store, location);
-    return RecordScreen(recorder: recorder, location: location);
+    return RecordScreen(
+      recorder: recorder,
+      location: location,
+      system: const ChannelSystemAccess(),
+    );
   } catch (error) {
     return StartupFailure(error: error);
   }

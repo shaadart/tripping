@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:tripping/app/system_access.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
 import 'package:tripping/recording/location_source.dart';
@@ -58,4 +59,32 @@ class FlakyStore extends JourneyStore {
     if (failAppends) throw const FileSystemException('No space left');
     return super.append(journeyId, fix);
   }
+}
+
+/// Android facts on demand, with a record of what the screen asked for.
+class FakeSystemAccess implements SystemAccess {
+  bool? notificationsShown = true;
+  bool? grantOnRequest = true;
+  bool restricted = false;
+  List<LastExit> exits = const [];
+  int notificationRequests = 0;
+  int appSettingsOpened = 0;
+
+  @override
+  Future<bool?> notificationsEnabled() async => notificationsShown;
+
+  @override
+  Future<bool?> requestNotifications() async {
+    notificationRequests++;
+    return notificationsShown = grantOnRequest;
+  }
+
+  @override
+  Future<bool> isBackgroundRestricted() async => restricted;
+
+  @override
+  Future<List<LastExit>> recentExits() async => exits;
+
+  @override
+  Future<void> openAppSettings() async => appSettingsOpened++;
 }

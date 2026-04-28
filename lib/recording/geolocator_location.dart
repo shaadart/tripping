@@ -44,55 +44,44 @@ class GeolocatorLocation implements LocationSource {
     }
   }
 
+  /// Listens exactly once per segment and never restarts on its own.
+  ///
+  /// On Android the stream runs geolocator's location foreground service, so
+  /// it must be listened to from a user action while Tripping is visible:
+  /// Android refuses to start that service from the background, and
+  /// geolocator then fails silently for the rest of the process (D-017). A
+  /// location switch-off therefore only reports [LocationUnavailable]; the
+  /// platform keeps the request registered and fixes resume when location
+  /// is back.
   @override
   Stream<Fix> watch(JourneyMode mode) {
     late final StreamController<Fix> fixes;
     StreamSubscription<Position>? positions;
     StreamSubscription<ServiceStatus>? service;
 
-    void stopPositions() {
-      unawaited(positions?.cancel());
-      positions = null;
-    }
-
-    void startPositions() {
-      positions =
-          Geolocator.getPositionStream(
-            locationSettings: settingsFor(mode),
-          ).listen(
-            (position) => fixes.add(fixFrom(position)),
-            onError: (Object error) {
-              switch (error) {
-                case LocationServiceDisabledException():
-                  // Restarted by the service status listener when it is back on.
-                  stopPositions();
-                  fixes.addError(
-                    const LocationUnavailable(LocationAccess.serviceOff),
-                  );
-                case PermissionDeniedException():
-                  fixes.addError(
-                    const LocationUnavailable(LocationAccess.denied),
-                  );
-                default:
-                  fixes.addError(error);
-              }
-            },
-          );
-    }
-
     fixes = StreamController<Fix>(
       onListen: () {
-        startPositions();
+        positions =
+            Geolocator.getPositionStream(
+              locationSettings: settingsFor(mode),
+            ).listen(
+              (position) => fixes.add(fixFrom(position)),
+              onError: (Object error) => fixes.addError(switch (error) {
+                LocationServiceDisabledException() => const LocationUnavailable(
+                  LocationAccess.serviceOff,
+                ),
+                PermissionDeniedException() => const LocationUnavailable(
+                  LocationAccess.denied,
+                ),
+                _ => error,
+              }),
+            );
         service = Geolocator.getServiceStatusStream().listen(
           (status) {
             if (status == ServiceStatus.disabled) {
-              if (positions == null) return;
-              stopPositions();
               fixes.addError(
                 const LocationUnavailable(LocationAccess.serviceOff),
               );
-            } else if (positions == null) {
-              startPositions();
             }
           },
           // Not every platform reports service changes; position errors
@@ -110,6 +99,8 @@ class GeolocatorLocation implements LocationSource {
 
   /// One fix per second on the road, every two seconds on foot. Never a
   /// cached position from before the request (`maxUpdateAge: zero`).
+  ///
+  /// On Android, [recordingNotification] keeps recording with the screen off.
   static LocationSettings settingsFor(JourneyMode mode) {
     final road = mode == JourneyMode.road;
     return switch (defaultTargetPlatform) {
@@ -117,6 +108,7 @@ class GeolocatorLocation implements LocationSource {
         accuracy: LocationAccuracy.high,
         intervalDuration: Duration(seconds: road ? 1 : 2),
         maxUpdateAge: Duration.zero,
+        foregroundNotificationConfig: recordingNotification,
       ),
       TargetPlatform.iOS => AppleSettings(
         accuracy: road
@@ -130,6 +122,25 @@ class GeolocatorLocation implements LocationSource {
       _ => const LocationSettings(accuracy: LocationAccuracy.high),
     };
   }
+
+  /// The notification of geolocator's location foreground service.
+  ///
+  /// The text is static because geolocator cannot update it, so it states
+  /// nothing that could go stale. The wake lock keeps fixes flowing while the
+  /// screen is off; its battery cost is measured in K1.
+  static const recordingNotification = ForegroundNotificationConfig(
+    notificationTitle: 'Recording your journey',
+    notificationText:
+        'Tripping is saving your location on this phone. Open Tripping to '
+        'pause or end.',
+    notificationChannelName: 'Journey recording',
+    notificationIcon: AndroidResource(
+      name: 'ic_stat_recording',
+      defType: 'drawable',
+    ),
+    enableWakeLock: true,
+    setOngoing: true,
+  );
 }
 
 /// Converts a platform position. Values the platform did not measure become

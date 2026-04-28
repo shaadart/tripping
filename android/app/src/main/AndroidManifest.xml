@@ -1,7 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Recording while Tripping is open. Background recording arrives in R5. -->
+    <!-- Location "while in use" only. Recording continues with the screen off
+         through geolocator's location foreground service, which is started
+         only from the user's Start tap (D-017). Never declare
+         ACCESS_BACKGROUND_LOCATION: geolocator would then ask for it. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- geolocator declares its service but none of these permissions. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Shows the "Recording your journey" notification (Android 13+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="Tripping"
         android:name=".TrippingApplication"

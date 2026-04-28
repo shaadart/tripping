@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:tripping/journey/journey.dart';
 import 'package:tripping/recording/geolocator_location.dart';
 import 'package:tripping/recording/location_source.dart';
 
@@ -68,5 +70,22 @@ void main() {
       accessFrom(LocationPermission.unableToDetermine),
       LocationAccess.denied,
     );
+  });
+
+  test('on Android, recording runs in a location foreground service', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    final settings =
+        GeolocatorLocation.settingsFor(JourneyMode.expedition)
+            as AndroidSettings;
+    final notification = settings.foregroundNotificationConfig!;
+
+    expect(settings.maxUpdateAge, Duration.zero);
+    expect(notification.enableWakeLock, isTrue);
+    expect(notification.setOngoing, isTrue);
+    expect(notification.notificationIcon.name, 'ic_stat_recording');
+    expect(notification.notificationIcon.defType, 'drawable');
+    expect(notification.notificationText, isNot(contains(RegExp(r'\d'))));
   });
 }

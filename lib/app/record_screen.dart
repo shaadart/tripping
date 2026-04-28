@@ -6,10 +6,14 @@ import '../journey/journey.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
+import 'system_access.dart';
 import 'theme.dart';
 
 /// Seconds without a fix before the screen says so.
 const _quietAfter = Duration(seconds: 15);
+
+/// Seconds after starting without any fix before the screen says so.
+const _noFixAfter = Duration(seconds: 30);
 
 /// One journey at a time: its numbers, one main action, and plain words
 /// about anything that is wrong. The map takes the centre in M1.
@@ -18,11 +22,13 @@ class RecordScreen extends StatefulWidget {
     super.key,
     required this.recorder,
     required this.location,
+    required this.system,
     this.clock = _utcNow,
   });
 
   final Recorder recorder;
   final LocationSource location;
+  final SystemAccess system;
   final DateTime Function() clock;
 
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -31,11 +37,18 @@ class RecordScreen extends StatefulWidget {
   State<RecordScreen> createState() => _RecordScreenState();
 }
 
-class _RecordScreenState extends State<RecordScreen> {
+class _RecordScreenState extends State<RecordScreen>
+    with WidgetsBindingObserver {
   late RecorderState _state = widget.recorder.state;
   late final StreamSubscription<RecorderState> _changes;
   Timer? _ticker;
   bool _busy = false;
+
+  /// Android facts, refreshed on start and whenever the user comes back
+  /// (they may have changed a setting meanwhile).
+  bool? _notificationsShown;
+  bool _restricted = false;
+  List<LastExit> _exits = const [];
 
   /// Why the last start or resume could not go ahead, and how to retry it.
   LocationAccess? _refused;
@@ -49,13 +62,42 @@ class _RecordScreenState extends State<RecordScreen> {
       _syncTicker();
     });
     _syncTicker();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_refreshSystem());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     unawaited(_changes.cancel());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refreshSystem());
+  }
+
+  Future<void> _refreshSystem() async {
+    final system = widget.system;
+    final shown = await system.notificationsEnabled();
+    final restricted = await system.isBackgroundRestricted();
+    final exits = await system.recentExits();
+    if (!mounted) return;
+    setState(() {
+      _notificationsShown = shown;
+      _restricted = restricted;
+      _exits = exits;
+    });
+  }
+
+  /// Asks to show the recording notification before recording starts, at
+  /// most as often as Android allows. A refusal does not stop recording.
+  Future<void> _askForNotifications() async {
+    if (_notificationsShown ?? false) return;
+    final shown = await widget.system.requestNotifications();
+    if (mounted) setState(() => _notificationsShown = shown);
   }
 
   /// Ticks once a second only while recording, for the clock and the age of
@@ -78,6 +120,7 @@ class _RecordScreenState extends State<RecordScreen> {
       _refused = null;
     });
     try {
+      await _askForNotifications();
       final access = await command();
       if (!mounted) return;
       setState(() {
@@ -167,7 +210,16 @@ class _RecordScreenState extends State<RecordScreen> {
                     _StatusLine(
                       state: state,
                       now: now,
-                      onOpenSettings: widget.location.openSettingsFor,
+                      exits: _exits,
+                      onOpenLocationSettings: () => widget.location
+                          .openSettingsFor(LocationAccess.serviceOff),
+                      onOpenAppSettings: widget.system.openAppSettings,
+                    ),
+                    _SystemNotes(
+                      state: state,
+                      restricted: _restricted,
+                      notificationsShown: _notificationsShown,
+                      onOpenAppSettings: widget.system.openAppSettings,
                     ),
                     const Spacer(),
                     if (_refused case final problem?)
@@ -378,22 +430,30 @@ class _Figure extends StatelessWidget {
   }
 }
 
-/// One line about the GPS and saving, in plain words. Amber when something
-/// needs attention.
+typedef _Action = ({String label, VoidCallback onPressed});
+
+/// One line about the GPS, saving or an interruption, in plain words, with
+/// at most one action. Amber when something needs attention.
 class _StatusLine extends StatelessWidget {
   const _StatusLine({
     required this.state,
     required this.now,
-    required this.onOpenSettings,
+    required this.exits,
+    required this.onOpenLocationSettings,
+    required this.onOpenAppSettings,
   });
 
   final RecorderState state;
   final DateTime now;
-  final Future<void> Function(LocationAccess problem) onOpenSettings;
+
+  /// Why recent processes ended, newest first, as Android recorded it.
+  final List<LastExit> exits;
+  final VoidCallback onOpenLocationSettings;
+  final VoidCallback onOpenAppSettings;
 
   @override
   Widget build(BuildContext context) {
-    final (message, needsAttention, fixable) = switch (state) {
+    final (message, needsAttention, action) = switch (state) {
       Idle() => (null, false, null),
       final Recording recording => _recordingStatus(recording),
       Paused() => (
@@ -401,12 +461,7 @@ class _StatusLine extends StatelessWidget {
         false,
         null,
       ),
-      Interrupted(:final stoppedAt) => (
-        'Recording stopped at ${_timeOfDay(context, stoppedAt)}. The phone '
-            'closed Tripping, so nothing after that was recorded.',
-        true,
-        null,
-      ),
+      Interrupted(:final stoppedAt) => _interruption(context, stoppedAt),
     };
     if (message == null) return const SizedBox.shrink();
     final color = needsAttention
@@ -419,16 +474,13 @@ class _StatusLine extends StatelessWidget {
           message,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: color),
         ),
-        if (fixable != null)
-          TextButton(
-            onPressed: () => onOpenSettings(fixable),
-            child: const Text('Turn on location'),
-          ),
+        if (action != null)
+          TextButton(onPressed: action.onPressed, child: Text(action.label)),
       ],
     );
   }
 
-  (String, bool, LocationAccess?) _recordingStatus(Recording state) {
+  (String, bool, _Action?) _recordingStatus(Recording state) {
     if (state.saveError != null) {
       return (
         'Can’t save to this phone. Positions are not being recorded.',
@@ -442,7 +494,7 @@ class _StatusLine extends StatelessWidget {
       return (
         'Location is off. Still recording — turn it on to continue the track.',
         true,
-        LocationAccess.serviceOff,
+        (label: 'Turn on location', onPressed: onOpenLocationSettings),
       );
     }
     if (problem != null) {
@@ -456,6 +508,18 @@ class _StatusLine extends StatelessWidget {
     final fix = state.latestFix;
     final arrived = state.latestFixArrivedAt;
     if (fix == null || arrived == null) {
+      // A start that fails inside the platform never reports an error, so
+      // waiting too long is itself the signal (D-017).
+      final since = state.progress.openSince;
+      final waited = since == null ? Duration.zero : now.difference(since);
+      if (waited > _noFixAfter) {
+        return (
+          'No GPS fix yet after ${_age(waited)}. Fixes take longer indoors; '
+              'check that location is on.',
+          true,
+          null,
+        );
+      }
       return ('Waiting for GPS…', false, null);
     }
     final quiet = now.difference(arrived);
@@ -474,6 +538,118 @@ class _StatusLine extends StatelessWidget {
       );
     }
     return ('GPS ±${accuracy.round()} m', false, null);
+  }
+
+  /// Names the real cause when Android recorded one, and offers battery
+  /// settings only when battery management may be to blame.
+  (String, bool, _Action?) _interruption(
+    BuildContext context,
+    DateTime stoppedAt,
+  ) {
+    final time = _timeOfDay(context, stoppedAt);
+    // The process that ended the recording is the first to exit after the
+    // last saved fix; later exits (an update, a crash days later) are not
+    // the cause. The fix carries GPS time, so allow some clock skew.
+    final candidates = [
+      for (final exit in exits)
+        if (!exit.at.isBefore(stoppedAt.subtract(const Duration(minutes: 2))))
+          exit,
+    ]..sort((a, b) => a.at.compareTo(b.at));
+    final cause = candidates.firstOrNull?.cause;
+    const lost = 'so nothing after that was recorded.';
+    final battery = (label: 'Battery settings', onPressed: onOpenAppSettings);
+    return switch (cause) {
+      ExitCause.user => (
+        'Recording stopped at $time because Tripping was stopped from Active '
+            'apps or Settings, $lost',
+        true,
+        null,
+      ),
+      ExitCause.swiped => (
+        'Recording stopped at $time because Tripping was swiped away from '
+            'recent apps, $lost',
+        true,
+        null,
+      ),
+      ExitCause.crash => (
+        'Recording stopped at $time because Tripping crashed, $lost',
+        true,
+        null,
+      ),
+      ExitCause.permission => (
+        'Recording stopped at $time because location permission was turned '
+            'off, $lost',
+        true,
+        null,
+      ),
+      ExitCause.update => (
+        'Recording stopped at $time because Tripping was updated, $lost',
+        true,
+        null,
+      ),
+      ExitCause.memory => (
+        'Recording stopped at $time: Android closed Tripping to free memory, '
+            '$lost',
+        true,
+        battery,
+      ),
+      ExitCause.system || null => (
+        'Recording stopped at $time. The phone closed Tripping, $lost If '
+            'this keeps happening, set Tripping’s battery use to Unrestricted.',
+        true,
+        battery,
+      ),
+    };
+  }
+}
+
+/// Android settings that silently undermine recording, stated up front.
+class _SystemNotes extends StatelessWidget {
+  const _SystemNotes({
+    required this.state,
+    required this.restricted,
+    required this.notificationsShown,
+    required this.onOpenAppSettings,
+  });
+
+  final RecorderState state;
+  final bool restricted;
+  final bool? notificationsShown;
+  final VoidCallback onOpenAppSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final notes = [
+      if (restricted)
+        'Battery use for Tripping is set to Restricted, so recording stops '
+            'when you leave the app.',
+      if (state is Recording && notificationsShown == false)
+        'Recording continues, but Android isn’t showing its notification. '
+            'Allow notifications for Tripping to see it.',
+    ];
+    if (notes.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final note in notes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                note,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: warningColor(context)),
+              ),
+            ),
+          TextButton(
+            onPressed: onOpenAppSettings,
+            child: const Text('Open settings'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
