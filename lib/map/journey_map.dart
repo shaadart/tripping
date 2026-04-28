@@ -124,42 +124,11 @@ class _JourneyMapState extends State<JourneyMap> {
       final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
       final stale = warningColor(context).toHexStringRGB();
       final line = trackLine(context);
-      final river = Theme.of(context).colorScheme.secondary.toHexStringRGB();
-      final ink = Theme.of(context).colorScheme.onSurface.toHexStringRGB();
-      final halo = Theme.of(context).colorScheme.surface.toHexStringRGB();
       // The planned way first, so the track drawn on top shows where the
-      // journey really went. A straight line is dashed: it is not a road.
+      // journey really went.
       await map.addGeoJsonSource(_routeSource, trackFeatures(const []));
-      await map.addLineLayer(
-        _routeSource,
-        'route-road',
-        LineLayerProperties(
-          lineColor: river,
-          lineWidth: 6,
-          lineOpacity: 0.75,
-          lineCap: 'round',
-          lineJoin: 'round',
-        ),
-        filter: [
-          '==',
-          ['get', 'kind'],
-          RouteKind.road.name,
-        ],
-      );
-      await map.addLineLayer(
-        _routeSource,
-        'route-straight',
-        LineLayerProperties(
-          lineColor: river,
-          lineWidth: 3,
-          lineDasharray: [1.5, 1.5],
-        ),
-        filter: [
-          '==',
-          ['get', 'kind'],
-          RouteKind.straight.name,
-        ],
-      );
+      if (!mounted) return;
+      await addRouteLayers(map, context, _routeSource);
       for (final source in [_historySource, _tailSource, _positionSource]) {
         await map.addGeoJsonSource(source, trackFeatures(const []));
       }
@@ -171,31 +140,8 @@ class _JourneyMapState extends State<JourneyMap> {
       if (!mounted) return;
       await addWaypointLayers(map, context, _waypointSource);
       await map.addGeoJsonSource(_destinationSource, trackFeatures(const []));
-      await map.addCircleLayer(
-        _destinationSource,
-        'destination-dot',
-        CircleLayerProperties(
-          circleRadius: 8,
-          circleColor: '#FFFFFF',
-          circleStrokeColor: river,
-          circleStrokeWidth: 4,
-        ),
-      );
-      await map.addSymbolLayer(
-        _destinationSource,
-        'destination-label',
-        SymbolLayerProperties(
-          textField: ['get', 'name'],
-          textFont: ['Noto Sans Regular'],
-          textSize: 13,
-          textOffset: [0, 1.3],
-          textAnchor: 'top',
-          textColor: ink,
-          textHaloColor: halo,
-          textHaloWidth: 1.5,
-          textOptional: true,
-        ),
-      );
+      if (!mounted) return;
+      await addDestinationLayers(map, context, _destinationSource);
       await map.addCircleLayer(
         _positionSource,
         'accuracy',

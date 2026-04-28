@@ -157,4 +157,15 @@ void main() {
       }
     });
   });
+
+  test('reached: some fix within 50 m of the point, in any segment', () {
+    final track = [
+      [walkFix(0), walkFix(60)],
+      [walkFix(120), walkFix(180)],
+    ];
+    // walkFix(180) is 270 m north of the start.
+    expect(reached(track, 32 + 300 / metersPerDegree, 77), isTrue);
+    expect(reached(track, 32 + 330 / metersPerDegree, 77), isFalse);
+    expect(reached(const [], 32, 77), isFalse);
+  });
 }

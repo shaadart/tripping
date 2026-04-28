@@ -104,6 +104,18 @@ void main() {
     test('is null without fixes', () {
       expect(boundsOf(const [[]]), isNull);
     });
+
+    test('takes in other points too, such as a destination', () {
+      final box = boundsOf(
+        [
+          [walkFix(0)],
+        ],
+        also: const [(31.5, 78.0)],
+      )!;
+      expect((box.south, box.east), (31.5, 78.0));
+      expect((box.north, box.west), (32.0, 77.0));
+      expect(boundsOf(const [], also: const [(1.0, 2.0)])!.north, 1.0);
+    });
   });
 
   group('endsFeatures', () {

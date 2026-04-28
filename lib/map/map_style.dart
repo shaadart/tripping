@@ -26,9 +26,10 @@ LineLayerProperties trackLine(BuildContext context) => LineLayerProperties(
 Future<void> fitCamera(
   MapLibreMapController map,
   Iterable<List<Fix>> track, {
+  Iterable<(double, double)> also = const [],
   EdgeInsets padding = const EdgeInsets.fromLTRB(48, 96, 48, 48),
 }) async {
-  final box = boundsOf(track);
+  final box = boundsOf(track, also: also);
   if (box == null) return;
   if (box.north - box.south < 0.002 && box.east - box.west < 0.002) {
     await map.moveCamera(
@@ -49,6 +50,83 @@ Future<void> fitCamera(
       top: padding.top,
       right: padding.right,
       bottom: padding.bottom,
+    ),
+  );
+}
+
+/// A planned way on [source] (see [routeFeatures]): a road is a broad
+/// river line; a straight line is thin and dashed, because it is not a
+/// road. Add it before the track, so the track shows where the journey
+/// really went.
+Future<void> addRouteLayers(
+  MapLibreMapController map,
+  BuildContext context,
+  String source,
+) async {
+  final river = Theme.of(context).colorScheme.secondary.toHexStringRGB();
+  await map.addLineLayer(
+    source,
+    '$source-road',
+    LineLayerProperties(
+      lineColor: river,
+      lineWidth: 6,
+      lineOpacity: 0.75,
+      lineCap: 'round',
+      lineJoin: 'round',
+    ),
+    filter: [
+      '==',
+      ['get', 'kind'],
+      RouteKind.road.name,
+    ],
+  );
+  await map.addLineLayer(
+    source,
+    '$source-straight',
+    LineLayerProperties(
+      lineColor: river,
+      lineWidth: 3,
+      lineDasharray: [1.5, 1.5],
+    ),
+    filter: [
+      '==',
+      ['get', 'kind'],
+      RouteKind.straight.name,
+    ],
+  );
+}
+
+/// The destination on [source] (see [destinationFeatures]): a white dot
+/// ringed in river, with its name.
+Future<void> addDestinationLayers(
+  MapLibreMapController map,
+  BuildContext context,
+  String source,
+) async {
+  final scheme = Theme.of(context).colorScheme;
+  await map.addCircleLayer(
+    source,
+    '$source-dot',
+    CircleLayerProperties(
+      circleRadius: 8,
+      circleColor: '#FFFFFF',
+      circleStrokeColor: scheme.secondary.toHexStringRGB(),
+      circleStrokeWidth: 4,
+    ),
+  );
+  await map.addSymbolLayer(
+    source,
+    '$source-label',
+    SymbolLayerProperties(
+      textField: ['get', 'name'],
+      textFont: ['Noto Sans Regular'],
+      textSize: 13,
+      textOffset: [0, 1.3],
+      textAnchor: 'top',
+      textColor: scheme.onSurface.toHexStringRGB(),
+      textHaloColor: scheme.surface.toHexStringRGB(),
+      textHaloWidth: 1.5,
+      textOptional: true,
     ),
   );
 }

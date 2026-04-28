@@ -100,9 +100,10 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
         final history = JourneyHistory(store);
         return HistoryScreen(
           history: history,
-          trackMapBuilder: (track, waypoints) => TrackMap(
+          trackMapBuilder: (track, waypoints, route) => TrackMap(
             track: track,
             waypoints: waypoints,
+            route: route,
             onDrawn: LongJourneyBench.enabled
                 ? LongJourneyBench.detailDrawn
                 : null,

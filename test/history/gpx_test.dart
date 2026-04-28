@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tripping/history/gpx.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
+import 'package:tripping/places/polyline.dart';
 
 import '../support/fakes.dart';
 
@@ -123,6 +124,65 @@ void main() {
           '<time>2026-10-28T06:01:00.000Z</time><type>planned</type></wpt>',
         ),
       );
+    });
+  });
+
+  group('the way planned', () {
+    RouteRow route({RouteKind? kind = RouteKind.road}) => RouteRow(
+      journeyId: 1,
+      destination: 'Camp & lake',
+      latitude: 32.01,
+      longitude: 77.01,
+      kind: kind,
+      provider: kind == null ? null : 'valhalla',
+      computedAt: kind == null ? null : t0,
+      meters: kind == null ? null : 1500,
+      geometry: kind == null
+          ? null
+          : encodePolyline(const [(32, 77), (32.005, 77), (32.01, 77.01)]),
+    );
+
+    String withRoute(RouteRow route) => gpxOf(
+      name: 'Walk',
+      mode: JourneyMode.expedition,
+      startedAt: t0,
+      track: [
+        [walkFix(0)],
+      ],
+      route: route,
+    );
+
+    test('comes after waypoints and before the track', () {
+      final out = withRoute(route());
+      expect(out.indexOf('<rte>'), lessThan(out.indexOf('<trk>')));
+      expect(
+        out,
+        contains(
+          '  <rte>\n'
+          '    <name>To Camp &amp; lake</name>\n'
+          '    <desc>Planned by road</desc>\n'
+          '    <src>valhalla</src>\n'
+          '    <type>road</type>\n'
+          '    <rtept lat="32.0000000" lon="77.0000000"></rtept>\n'
+          '    <rtept lat="32.0050000" lon="77.0000000"></rtept>\n'
+          '    <rtept lat="32.0100000" lon="77.0100000">'
+          '<name>Camp &amp; lake</name></rtept>\n'
+          '  </rte>\n',
+        ),
+      );
+    });
+
+    test('a straight line says it is not a road', () {
+      final out = withRoute(route(kind: RouteKind.straight));
+      expect(out, contains('<type>straight</type>'));
+      expect(out, contains('not a road'));
+    });
+
+    test('a destination with no way planned is that one point', () {
+      final out = withRoute(route(kind: null));
+      expect(out, contains('<type>destination</type>'));
+      expect('<rtept '.allMatches(out), hasLength(1));
+      expect(out, isNot(contains('<src>')));
     });
   });
 }

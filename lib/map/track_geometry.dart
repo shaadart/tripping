@@ -164,28 +164,32 @@ class TrackBuffer {
       : _segments.last.sublist(max(0, _folded - 1));
 }
 
-/// The box around every fix of [track], or null when it has none.
+/// The box around every fix of [track] and every point of [also], or null
+/// when there are none.
 ({double south, double west, double north, double east})? boundsOf(
-  Iterable<List<Fix>> track,
-) {
+  Iterable<List<Fix>> track, {
+  Iterable<(double, double)> also = const [],
+}) {
   ({double south, double west, double north, double east})? box;
+  void add(double latitude, double longitude) {
+    final b = box;
+    box = b == null
+        ? (south: latitude, west: longitude, north: latitude, east: longitude)
+        : (
+            south: min(b.south, latitude),
+            west: min(b.west, longitude),
+            north: max(b.north, latitude),
+            east: max(b.east, longitude),
+          );
+  }
+
   for (final segment in track) {
     for (final fix in segment) {
-      final b = box;
-      box = b == null
-          ? (
-              south: fix.latitude,
-              west: fix.longitude,
-              north: fix.latitude,
-              east: fix.longitude,
-            )
-          : (
-              south: min(b.south, fix.latitude),
-              west: min(b.west, fix.longitude),
-              north: max(b.north, fix.latitude),
-              east: max(b.east, fix.longitude),
-            );
+      add(fix.latitude, fix.longitude);
     }
+  }
+  for (final (latitude, longitude) in also) {
+    add(latitude, longitude);
   }
   return box;
 }

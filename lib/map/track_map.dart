@@ -3,11 +3,12 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
+import '../places/polyline.dart';
 import 'map_style.dart';
 import 'track_geometry.dart';
 
 /// A past journey on the map: its track, one line per segment, with where it
-/// began and ended, framed to fit.
+/// began and ended, the way planned and the destination, framed to fit.
 ///
 /// The map is created before the track has loaded, so its style loads at the
 /// same time; a cover hides it until the track is drawn and framed.
@@ -16,6 +17,7 @@ class TrackMap extends StatefulWidget {
     super.key,
     required this.track,
     this.waypoints = const [],
+    this.route,
     this.onDrawn,
   });
 
@@ -23,6 +25,9 @@ class TrackMap extends StatefulWidget {
   final List<List<Fix>>? track;
 
   final List<WaypointRow> waypoints;
+
+  /// Where the journey was going, if anywhere.
+  final RouteRow? route;
 
   /// Called once the track is on the map, with the time since this widget
   /// was created.
@@ -58,6 +63,17 @@ class _TrackMapState extends State<TrackMap> {
     _drawing = true;
     final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
     final line = trackLine(context);
+    final route = widget.route;
+    final geometry = route?.geometry;
+    final way = geometry == null
+        ? const <(double, double)>[]
+        : decodePolyline(geometry);
+    final kind = route?.kind;
+    if (route != null && kind != null) {
+      await map.addGeoJsonSource('route', routeFeatures(way, kind));
+      if (!mounted) return;
+      await addRouteLayers(map, context, 'route');
+    }
     await map.addGeoJsonSource('track', trackFeatures(track));
     await map.addLineLayer('track', 'track-line', line);
     await map.addGeoJsonSource('ends', endsFeatures(track));
@@ -88,9 +104,18 @@ class _TrackMapState extends State<TrackMap> {
     await map.addGeoJsonSource('waypoints', waypointFeatures(widget.waypoints));
     if (!mounted) return;
     await addWaypointLayers(map, context, 'waypoints');
+    if (route != null) {
+      await map.addGeoJsonSource(
+        'destination',
+        destinationFeatures(route.destination, route.latitude, route.longitude),
+      );
+      if (!mounted) return;
+      await addDestinationLayers(map, context, 'destination');
+    }
     await fitCamera(
       map,
       track,
+      also: [...way, if (route != null) (route.latitude, route.longitude)],
       padding: const EdgeInsets.fromLTRB(40, 40, 40, 40),
     );
     widget.onDrawn?.call(_age.elapsed);

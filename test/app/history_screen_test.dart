@@ -8,6 +8,7 @@ import 'package:tripping/history/elevation_profile.dart';
 import 'package:tripping/history/journey_history.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
+import 'package:tripping/places/polyline.dart';
 
 import '../support/fakes.dart';
 
@@ -17,6 +18,12 @@ class FakeHistory implements JourneyHistory {
 
   final List<PastJourney> journeys;
   final deleted = <int>[];
+
+  /// Where every journey was going; none by default.
+  RouteRow? route;
+
+  @override
+  Future<RouteRow?> routeOf(int journeyId) async => route;
 
   @override
   Future<List<PastJourney>> load() async => [...journeys];
@@ -102,6 +109,7 @@ PastJourney pastWalk(int id) => PastJourney(
 void main() {
   late List<List<List<Fix>>> drawn;
   var shownWaypoints = <WaypointRow>[];
+  RouteRow? shownRoute;
 
   setUp(() => drawn = []);
 
@@ -115,9 +123,10 @@ void main() {
         theme: trippingTheme(Brightness.light),
         home: HistoryScreen(
           history: history,
-          trackMapBuilder: (track, waypoints) {
+          trackMapBuilder: (track, waypoints, route) {
             if (track != null) drawn.add(track);
             shownWaypoints = waypoints;
+            shownRoute = route;
             return const SizedBox.expand();
           },
           onExport: onExport,
@@ -166,6 +175,56 @@ void main() {
     expect(find.textContaining('±6 m'), findsOneWidget);
     expect(find.text('Waypoint 2'), findsOneWidget);
     expect(find.textContaining('Planned'), findsOneWidget);
+  });
+
+  RouteRow routeTo(double north, {RouteKind kind = RouteKind.road}) => RouteRow(
+    journeyId: 1,
+    destination: 'Camp',
+    latitude: 32 + north / metersPerDegree,
+    longitude: 77,
+    kind: kind,
+    provider: 'valhalla',
+    computedAt: t0,
+    meters: 6300,
+    seconds: 1300,
+    geometry: encodePolyline([(32, 77), (32 + north / metersPerDegree, 77)]),
+  );
+
+  testWidgets('the destination, the way planned, and whether it was reached', (
+    tester,
+  ) async {
+    // The walk ends 270 m north of its start.
+    final history = FakeHistory([pastWalk(1)])..route = routeTo(280);
+    await show(tester, history);
+    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.pumpAndSettle();
+    expect(shownRoute?.destination, 'Camp');
+    expect(find.text('To Camp'), findsOneWidget);
+    expect(find.text('Planned 6.30 km by road · Reached'), findsOneWidget);
+  });
+
+  testWidgets('a straight line that was never reached says both', (
+    tester,
+  ) async {
+    final history = FakeHistory([pastWalk(1)])
+      ..route = routeTo(2000, kind: RouteKind.straight);
+    await show(tester, history);
+    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('6.30 km in a straight line, not by road · Not reached'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('without a destination there is no destination line', (
+    tester,
+  ) async {
+    await show(tester, FakeHistory([pastWalk(1)]));
+    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('To '), findsNothing);
+    expect(shownRoute, isNull);
   });
 
   testWidgets('climb, descent and the height chart, only when known', (

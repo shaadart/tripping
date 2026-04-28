@@ -12,8 +12,9 @@ class RouteProgress {
     this.arrived = false,
   });
 
-  /// Along the road while on it; in a straight line for a straight way or
-  /// once off the road.
+  /// Along the road while on it, plus the last stretch from where the road
+  /// ends to the destination; in a straight line for a straight way or once
+  /// off the road.
   final double metersLeft;
 
   /// The service's estimate for what is left; null without one (a straight
@@ -120,8 +121,17 @@ class RouteFollower {
     }
     final share = ((total - (_lastAlong ?? along)) / total).clamp(0.0, 1.0);
     final seconds = this.seconds;
+    // A route ends on the road nearest the destination, which may be a park,
+    // a peak or a field away from it: that last stretch is still to go.
+    final (endLat, endLon) = _points.last;
+    final beyond = metersBetween(
+      endLat,
+      endLon,
+      destination.$1,
+      destination.$2,
+    );
     return RouteProgress(
-      metersLeft: meters * share,
+      metersLeft: meters * share + beyond,
       secondsLeft: seconds == null ? null : seconds * share,
     );
   }

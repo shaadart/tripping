@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import '../journey/geo.dart';
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../journey/simplify.dart';
@@ -8,6 +9,7 @@ import 'elevation_profile.dart';
 import 'gpx.dart' as gpx;
 import '../recording/track_policy.dart';
 import '../recording/track_stats.dart';
+import '../routing/route_progress.dart';
 
 /// Raise when the distance rules or the outline change: summaries stored by
 /// older rules are then derived again from their tracks.
@@ -71,6 +73,7 @@ class JourneyHistory {
         startedAt: past.journey.createdAt,
         track: await _store.track(past.journey.id),
         waypoints: await _store.waypointsOf(past.journey.id),
+        route: await _store.routeOf(past.journey.id),
       );
 
   /// Climb, descent and a height profile from the full track, or null when
@@ -80,6 +83,9 @@ class JourneyHistory {
         await _store.track(past.journey.id),
         TrackPolicy.of(past.journey.mode),
       );
+
+  /// Where the journey was going and the way planned there, if anywhere.
+  Future<RouteRow?> routeOf(int journeyId) => _store.routeOf(journeyId);
 
   /// The journey's waypoints in the order they were made.
   Future<List<WaypointRow>> waypointsOf(int journeyId) =>
@@ -184,3 +190,14 @@ List<List<OutlinePoint>> decodeOutline(String json) => [
 ];
 
 double _round(double degrees) => (degrees * 1e5).roundToDouble() / 1e5;
+
+/// Whether [track] came within [RouteFollower.arrivedWithin] of the point:
+/// told from what was recorded, not stored, so it cannot disagree with it.
+bool reached(List<List<Fix>> track, double latitude, double longitude) =>
+    track.any(
+      (segment) => segment.any(
+        (fix) =>
+            metersBetween(fix.latitude, fix.longitude, latitude, longitude) <=
+            RouteFollower.arrivedWithin,
+      ),
+    );

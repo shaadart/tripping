@@ -24,7 +24,11 @@ class HistoryScreen extends StatefulWidget {
 
   /// Builds the map of a past journey; injected so tests need no platform
   /// map.
-  final Widget Function(List<List<Fix>>? track, List<WaypointRow> waypoints)
+  final Widget Function(
+    List<List<Fix>>? track,
+    List<WaypointRow> waypoints,
+    RouteRow? route,
+  )
   trackMapBuilder;
 
   @override

@@ -110,6 +110,21 @@ void main() {
     expect(follower.update(fixAt(41, 300, -60)).offRoute, isTrue);
   });
 
+  test('the stretch from where the road ends to the destination counts', () {
+    // The road ends 100 m short, beside a park; the destination is in it.
+    final follower = RouteFollower(
+      points: [at(0, 0), at(1000, 0)],
+      kind: RouteKind.road,
+      meters: 1000,
+      seconds: 100,
+      destination: at(1100, 0),
+    );
+    expect(follower.update(fixAt(0, 0, 0)).metersLeft, closeTo(1100, 2));
+    final atRoadEnd = follower.update(fixAt(100, 1000, 0));
+    expect(atRoadEnd.metersLeft, closeTo(100, 2));
+    expect(atRoadEnd.arrived, isFalse);
+  });
+
   test('one wild fix is not a detour and does not move what is left', () {
     final follower = ell();
     late RouteProgress before;

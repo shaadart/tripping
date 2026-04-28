@@ -24,7 +24,11 @@ class JourneyScreen extends StatefulWidget {
   final JourneyHistory history;
 
   /// Builds the map; the track is null while it loads.
-  final Widget Function(List<List<Fix>>? track, List<WaypointRow> waypoints)
+  final Widget Function(
+    List<List<Fix>>? track,
+    List<WaypointRow> waypoints,
+    RouteRow? route,
+  )
   trackMapBuilder;
 
   /// Hands the journey to other apps as GPX.
@@ -39,9 +43,10 @@ class _JourneyScreenState extends State<JourneyScreen> {
     widget.past,
   );
 
-  late final Future<(List<List<Fix>>, List<WaypointRow>)> _loaded = (
+  late final Future<(List<List<Fix>>, List<WaypointRow>, RouteRow?)> _loaded = (
     widget.history.trackOf(widget.past.journey.id),
     widget.history.waypointsOf(widget.past.journey.id),
+    widget.history.routeOf(widget.past.journey.id),
   ).wait;
 
   Future<void> _export(Future<void> Function(PastJourney) export) async {
@@ -116,9 +121,9 @@ class _JourneyScreenState extends State<JourneyScreen> {
                   );
                 }
                 // Built at once, so the map loads while the track does.
-                final (track, waypoints) =
-                    snapshot.data ?? (null, const <WaypointRow>[]);
-                return widget.trackMapBuilder(track, waypoints);
+                final (track, waypoints, route) =
+                    snapshot.data ?? (null, const <WaypointRow>[], null);
+                return widget.trackMapBuilder(track, waypoints, route);
               },
             ),
           ),
@@ -202,6 +207,16 @@ class _JourneyScreenState extends State<JourneyScreen> {
                       ),
                       FutureBuilder(
                         future: _loaded,
+                        builder: (context, snapshot) => switch (snapshot.data) {
+                          (final track, _, final route?) => _Destination(
+                            route: route,
+                            track: track,
+                          ),
+                          _ => const SizedBox.shrink(),
+                        },
+                      ),
+                      FutureBuilder(
+                        future: _loaded,
                         builder: (context, snapshot) => _Waypoints(
                           waypoints: snapshot.data?.$2 ?? const [],
                         ),
@@ -210,6 +225,56 @@ class _JourneyScreenState extends State<JourneyScreen> {
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where the journey was going, the way planned, and whether the track
+/// got there.
+class _Destination extends StatelessWidget {
+  const _Destination({required this.route, required this.track});
+
+  final RouteRow route;
+  final List<List<Fix>> track;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final meters = route.meters;
+    final there = reached(track, route.latitude, route.longitude);
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.flag_circle_outlined, size: 20, color: scheme.secondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('To ${route.destination}', style: text.bodyLarge),
+                Text(
+                  [
+                    switch ((route.kind, meters)) {
+                      (RouteKind.road, final meters?) =>
+                        'Planned ${kilometres(meters)} by road',
+                      (RouteKind.straight, final meters?) =>
+                        '${kilometres(meters)} in a straight line, not by road',
+                      _ => 'No way was planned',
+                    },
+                    there ? 'Reached' : 'Not reached',
+                  ].join(' · '),
+                  style: text.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

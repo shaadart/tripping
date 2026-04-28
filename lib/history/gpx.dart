@@ -1,9 +1,10 @@
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
+import '../places/polyline.dart';
 
-/// A journey as GPX 1.1: its waypoints, then one track with one `trkseg` per
-/// recorded segment, so other apps don't join what Tripping never joined
-/// either.
+/// A journey as GPX 1.1: its waypoints, the way planned to its destination,
+/// then one track with one `trkseg` per recorded segment, so other apps
+/// don't join what Tripping never joined either.
 ///
 /// Only what was measured is written: position, altitude and time. GPX has
 /// no field for a fix's accuracy in metres (`hdop` is a unitless dilution),
@@ -14,6 +15,7 @@ String gpxOf({
   required DateTime startedAt,
   required List<List<Fix>> track,
   List<WaypointRow> waypoints = const [],
+  RouteRow? route,
 }) {
   final out = StringBuffer()
     ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
@@ -50,6 +52,39 @@ String gpxOf({
         null => '',
       })
       ..writeln('<type>${waypoint.kind.name}</type></wpt>');
+  }
+  // Then the plan, before what happened. Its type says whether it is a
+  // road or a straight line, so no app mistakes one for the other.
+  if (route != null) {
+    final geometry = route.geometry;
+    final points = geometry == null
+        ? [(route.latitude, route.longitude)]
+        : decodePolyline(geometry);
+    out
+      ..writeln('  <rte>')
+      ..writeln('    <name>${_escape('To ${route.destination}')}</name>')
+      ..writeln(
+        '    <desc>${switch (route.kind) {
+          RouteKind.road => 'Planned by road',
+          RouteKind.straight => 'A straight line, not a road: no road route was found',
+          null => 'Destination only: no way was planned',
+        }}</desc>',
+      );
+    if (route.provider case final provider?) {
+      out.writeln('    <src>${_escape(provider)}</src>');
+    }
+    out.writeln('    <type>${route.kind?.name ?? 'destination'}</type>');
+    for (final (i, (latitude, longitude)) in points.indexed) {
+      out.write(
+        '    <rtept lat="${latitude.toStringAsFixed(7)}" '
+        'lon="${longitude.toStringAsFixed(7)}">',
+      );
+      if (i == points.length - 1) {
+        out.write('<name>${_escape(route.destination)}</name>');
+      }
+      out.writeln('</rtept>');
+    }
+    out.writeln('  </rte>');
   }
   out
     ..writeln('  <trk>')
