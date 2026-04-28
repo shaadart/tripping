@@ -4,14 +4,38 @@ import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../app/theme.dart';
+import '../journey/geo.dart';
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
+import 'map_style.dart';
 import 'track_geometry.dart';
 
 /// Seconds without a fix after which the position is drawn as stale.
 const _staleAfter = Duration(seconds: 15);
+
+/// Basemap layers (in both bundled styles) that draw something almost
+/// anywhere. When none of them has a feature on screen, the map has nothing
+/// to show there: offline in a place never viewed, or no map data.
+const _basemapLayers = [
+  'water',
+  'landcover_wood',
+  'landuse_residential',
+  'waterway',
+  'highway_path',
+  'highway_minor',
+  'highway_major_inner',
+  'highway_motorway_inner',
+  'railway',
+];
+
+/// Steps longer than this (driving speeds, at one fix a second) ease the
+/// camera; shorter ones move it at once.
+const _easeAbove = 15.0;
+
+/// How often, at most, to check whether the basemap is blank.
+const _blankCheckEvery = Duration(seconds: 10);
 
 /// The map under a journey: basemap, the recorded track and the position.
 ///
@@ -49,6 +73,9 @@ class _JourneyMapState extends State<JourneyMap> {
   bool _follow = true;
   bool _zoomedIn = false;
   Offset? _touchStart;
+  bool _blank = false;
+  DateTime? _blankCheckedAt;
+  int _blankChecks = 0;
 
   @override
   void didUpdateWidget(JourneyMap oldWidget) {
@@ -69,16 +96,7 @@ class _JourneyMapState extends State<JourneyMap> {
         await map.addGeoJsonSource(source, trackFeatures(const []));
       }
       for (final source in [_historySource, _tailSource]) {
-        await map.addLineLayer(
-          source,
-          '$source-line',
-          LineLayerProperties(
-            lineColor: ember,
-            lineWidth: 5,
-            lineCap: 'round',
-            lineJoin: 'round',
-          ),
-        );
+        await map.addLineLayer(source, '$source-line', trackLine(ember));
       }
       await map.addCircleLayer(
         _positionSource,
@@ -163,6 +181,7 @@ class _JourneyMapState extends State<JourneyMap> {
     }
 
     await _drawPosition(map, state);
+    await _checkBlank(map);
   }
 
   Future<void> _drawHistory(MapLibreMapController map) =>
@@ -202,52 +221,54 @@ class _JourneyMapState extends State<JourneyMap> {
       ),
     );
     if (fix == null || identical(fix, _shownFix)) return;
+    final previous = _shownFix;
     _shownFix = fix;
     if (state is! Recording || !_follow) return;
     final target = LatLng(fix.latitude, fix.longitude);
-    await map.animateCamera(
-      _zoomedIn
-          ? CameraUpdate.newLatLng(target)
-          : CameraUpdate.newLatLngZoom(target, 16),
-    );
-    _zoomedIn = true;
+    if (!_zoomedIn) {
+      await map.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      _zoomedIn = true;
+    } else if (previous != null && fix.metersTo(previous) < _easeAbove) {
+      // A step of a few pixels looks the same either way, and an ease
+      // renders dozens of frames per fix on a 120 Hz screen (E-015).
+      await map.moveCamera(CameraUpdate.newLatLng(target));
+    } else {
+      await map.animateCamera(CameraUpdate.newLatLng(target));
+    }
   }
 
   Future<void> _fitTrack(MapLibreMapController map) async {
-    final fixes = [for (final segment in _track.segments) ...segment];
-    if (fixes.isEmpty) return;
-    var south = fixes.first.latitude, north = south;
-    var west = fixes.first.longitude, east = west;
-    for (final fix in fixes) {
-      if (fix.latitude < south) south = fix.latitude;
-      if (fix.latitude > north) north = fix.latitude;
-      if (fix.longitude < west) west = fix.longitude;
-      if (fix.longitude > east) east = fix.longitude;
-    }
-    if (north - south < 0.002 && east - west < 0.002) {
-      await map.moveCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng((south + north) / 2, (west + east) / 2),
-          16,
-        ),
-      );
-    } else {
-      await map.moveCamera(
-        CameraUpdate.newLatLngBounds(
-          LatLngBounds(
-            southwest: LatLng(south, west),
-            northeast: LatLng(north, east),
-          ),
-          left: 48,
-          top: 96,
-          right: 48,
-          bottom: 48,
-        ),
-      );
-    }
+    if (_track.lastFix == null) return;
+    await fitCamera(map, _track.segments);
     _zoomedIn = true;
   }
 
+  /// Asks MapLibre whether any basemap feature is drawn on screen. Runs with
+  /// the regular updates rather than on "map idle": offline, failed tiles
+  /// keep retrying and the map never becomes idle.
+  Future<void> _checkBlank(MapLibreMapController map) async {
+    final now = DateTime.now();
+    final last = _blankCheckedAt;
+    if (last != null && now.difference(last) < _blankCheckEvery) return;
+    _blankCheckedAt = now;
+    if (!mounted) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    // MapLibre queries in physical pixels.
+    final size = box.size * MediaQuery.devicePixelRatioOf(context);
+    final features = await map.queryRenderedFeaturesInRect(
+      Offset.zero & size,
+      _basemapLayers,
+      null,
+    );
+    _blankChecks = features.isEmpty ? _blankChecks + 1 : 0;
+    // Tiles take a few seconds to arrive after a move, so only a map still
+    // blank at the next check is called unavailable.
+    final blank = _blankChecks >= 2;
+    if (mounted && blank != _blank) setState(() => _blank = blank);
+  }
+
+  /// Back to the follow view: street level, north up.
   void _recenter() {
     setState(() => _follow = true);
     final fix = _shownFix;
@@ -255,14 +276,15 @@ class _JourneyMapState extends State<JourneyMap> {
     if (fix == null || map == null) return;
     _serially(
       () async => map.animateCamera(
-        CameraUpdate.newLatLng(LatLng(fix.latitude, fix.longitude)),
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: LatLng(fix.latitude, fix.longitude), zoom: 16),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final recording = widget.state is Recording;
     return Stack(
       children: [
@@ -279,9 +301,7 @@ class _JourneyMapState extends State<JourneyMap> {
             }
           },
           child: MapLibreMap(
-            styleString: dark
-                ? 'assets/map/dark.json'
-                : 'assets/map/positron.json',
+            styleString: mapStyleFor(context),
             initialCameraPosition: const CameraPosition(
               target: LatLng(20, 0),
               zoom: 1,
@@ -292,6 +312,13 @@ class _JourneyMapState extends State<JourneyMap> {
             attributionButtonPosition: AttributionButtonPosition.bottomRight,
           ),
         ),
+        if (_blank)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: Center(child: _MapNote('Map not available here')),
+          ),
         if (recording && !_follow && _shownFix != null)
           Positioned(
             right: 16,
@@ -303,6 +330,27 @@ class _JourneyMapState extends State<JourneyMap> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _MapNote extends StatelessWidget {
+  const _MapNote(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+      ),
     );
   }
 }

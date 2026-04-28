@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../journey/journey.dart';
+import '../journey/simplify.dart';
 
 /// Metres per pixel at zoom 0 on the equator in MapLibre's 512-pixel world.
 const _metersPerPixelAtZoom0 = 2 * pi * 6378137 / 512;
@@ -77,17 +78,29 @@ Map<String, Object> positionFeatures(
 }
 
 /// The journey's track as the map draws it. Recent fixes form a small tail
-/// that is resent with every fix; older ones move into a history that is
-/// resent only occasionally, so the cost per fix stays flat on long journeys.
+/// that is resent with every fix; older ones are folded into a history that
+/// is simplified once and resent only at a fold, so the cost per fix stays
+/// small on long journeys.
 class TrackBuffer {
-  /// Tail fixes beyond which the tail is folded into history.
+  TrackBuffer({this.tolerance = 2});
+
+  /// Tail fixes beyond which the tail is folded into history, at least.
   static const tailLimit = 60;
 
+  /// Metres a drawn history line may stray from the fixes; 2 m is under two
+  /// pixels at street zoom, against a 5-pixel line.
+  final double tolerance;
+
   final List<List<Fix>> _segments = [];
+
+  /// Simplified fixes of every segment up to the fold.
+  final List<List<Fix>> _history = [];
+  int _historyPoints = 0;
 
   /// Fixes of the last segment already in history.
   int _folded = 0;
 
+  /// Every recorded fix, unsimplified.
   List<List<Fix>> get segments => _segments;
 
   Fix? get lastFix => _segments
@@ -101,11 +114,16 @@ class TrackBuffer {
       ..addAll([
         for (final segment in track) [...segment],
       ]);
+    _history
+      ..clear()
+      ..addAll([for (final segment in track) simplify(segment, tolerance)]);
+    _historyPoints = _history.fold(0, (sum, s) => sum + s.length);
     _folded = _segments.isEmpty ? 0 : _segments.last.length;
   }
 
   void startSegment() {
     _segments.add([]);
+    _history.add([]);
     _folded = 0;
   }
 
@@ -114,20 +132,78 @@ class TrackBuffer {
     _segments.last.add(fix);
   }
 
+  /// Folding resends the history, so it waits until the tail is about the
+  /// square root of the history: that keeps the points sent per fix (tail
+  /// plus history per fold) near their minimum.
   bool get tailIsLong =>
-      _segments.isNotEmpty && _segments.last.length - _folded > tailLimit;
+      _segments.isNotEmpty &&
+      _segments.last.length - _folded >
+          max(tailLimit, sqrt(_historyPoints).ceil());
 
-  void foldTail() => _folded = _segments.isEmpty ? 0 : _segments.last.length;
+  void foldTail() {
+    if (_segments.isEmpty) return;
+    final last = _segments.last;
+    // The chunk starts at the last folded fix, which simplification kept as
+    // an end point, so the history stays one continuous line.
+    final chunk = simplify(last.sublist(max(0, _folded - 1)), tolerance);
+    final drawn = _history.last;
+    final added = drawn.isEmpty ? chunk : chunk.skip(1);
+    drawn.addAll(added);
+    _historyPoints += added.length;
+    _folded = last.length;
+  }
 
-  /// Everything except the unfolded tail.
-  Iterable<List<Fix>> get history => [
-    ..._segments.take(max(0, _segments.length - 1)),
-    if (_segments.isNotEmpty) _segments.last.sublist(0, _folded),
-  ];
+  /// Everything except the unfolded tail, simplified.
+  List<List<Fix>> get history => _history;
 
   /// The unfolded fixes of the last segment, starting with the last folded
   /// one so the line stays continuous.
   List<Fix> get tail => _segments.isEmpty
       ? const []
       : _segments.last.sublist(max(0, _folded - 1));
+}
+
+/// The box around every fix of [track], or null when it has none.
+({double south, double west, double north, double east})? boundsOf(
+  Iterable<List<Fix>> track,
+) {
+  ({double south, double west, double north, double east})? box;
+  for (final segment in track) {
+    for (final fix in segment) {
+      final b = box;
+      box = b == null
+          ? (
+              south: fix.latitude,
+              west: fix.longitude,
+              north: fix.latitude,
+              east: fix.longitude,
+            )
+          : (
+              south: min(b.south, fix.latitude),
+              west: min(b.west, fix.longitude),
+              north: max(b.north, fix.latitude),
+              east: max(b.east, fix.longitude),
+            );
+    }
+  }
+  return box;
+}
+
+/// Where the journey began and where it ended, as points with an `end`
+/// property of `start` or `finish`.
+Map<String, Object> endsFeatures(List<List<Fix>> track) {
+  final fixes = [for (final segment in track) ...segment];
+  if (fixes.isEmpty) return _collection(const []);
+  Map<String, Object> point(Fix fix, String end) => {
+    'type': 'Feature',
+    'properties': {'end': end},
+    'geometry': {
+      'type': 'Point',
+      'coordinates': [fix.longitude, fix.latitude],
+    },
+  };
+  return _collection([
+    point(fixes.first, 'start'),
+    if (fixes.length > 1) point(fixes.last, 'finish'),
+  ]);
 }

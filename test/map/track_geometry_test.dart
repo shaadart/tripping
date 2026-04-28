@@ -5,6 +5,8 @@ import 'package:tripping/journey/journey.dart';
 import 'package:tripping/map/track_geometry.dart';
 
 import '../support/fakes.dart';
+import '../support/geometry.dart';
+import '../support/traces.dart';
 
 List<Object?> coordinatesOf(Map<String, Object> collection) => [
   for (final feature in collection['features']! as List<Object?>)
@@ -85,19 +87,108 @@ void main() {
     });
   });
 
-  group('TrackBuffer', () {
-    test('history and tail together draw every fix, joined by one', () {
-      final buffer = TrackBuffer();
-      for (var second = 0; second < 150; second++) {
-        buffer.add(walkFix(second));
-        if (buffer.tailIsLong) buffer.foldTail();
-      }
+  group('boundsOf', () {
+    test('spans every fix of every segment', () {
+      final box = boundsOf([
+        [walkFix(0), walkFix(10)],
+        const [],
+        [walkFix(100)],
+      ])!;
+      expect(box.south, walkFix(0).latitude);
+      expect(box.north, walkFix(100).latitude);
+      expect(box.west, 77);
+      expect(box.east, 77);
+    });
 
-      final history = buffer.history.toList();
+    test('is null without fixes', () {
+      expect(boundsOf(const [[]]), isNull);
+    });
+  });
+
+  group('endsFeatures', () {
+    test('marks the first and last fix of the journey', () {
+      final ends = endsFeatures([
+        [walkFix(0), walkFix(1)],
+        [walkFix(100), walkFix(101)],
+      ]);
+      expect(coordinatesOf(ends), [
+        [walkFix(0).longitude, walkFix(0).latitude],
+        [walkFix(101).longitude, walkFix(101).latitude],
+      ]);
+    });
+
+    test('a single fix is only a start', () {
+      expect(
+        coordinatesOf(
+          endsFeatures([
+            [walkFix(0)],
+          ]),
+        ),
+        hasLength(1),
+      );
+    });
+  });
+
+  group('TrackBuffer', () {
+    /// Adds [fixes] the way the live map does.
+    void record(
+      TrackBuffer buffer,
+      Iterable<Fix> fixes, {
+      void Function()? onFold,
+    }) {
+      for (final fix in fixes) {
+        buffer.add(fix);
+        if (buffer.tailIsLong) {
+          buffer.foldTail();
+          onFold?.call();
+        }
+      }
+    }
+
+    test('history and tail draw every fix within the tolerance, joined', () {
+      final trace = TraceBuilder(seed: 2, accuracy: 5)
+        ..move(duration: const Duration(minutes: 4), speed: 1.4, heading: 10)
+        ..move(duration: const Duration(minutes: 4), speed: 1.4, heading: 200);
+      final buffer = TrackBuffer();
+      record(buffer, trace.fixes);
+
+      final history = buffer.history.single;
       final tail = buffer.tail;
-      expect(history.single.last, tail.first);
-      expect(history.single.length + tail.length - 1, 150);
-      expect(tail.length, lessThanOrEqualTo(TrackBuffer.tailLimit + 1));
+      expect(history.last, tail.first);
+      expect(history.first, trace.fixes.first);
+      expect(tail.last, trace.fixes.last);
+      final drawn = [...history, ...tail.skip(1)];
+      expect(drawn.length, lessThan(trace.fixes.length));
+      for (final fix in trace.fixes) {
+        expect(distanceToLine(fix, drawn), lessThan(buffer.tolerance + 0.1));
+      }
+    });
+
+    test('a straight line folds down to its ends', () {
+      final buffer = TrackBuffer();
+      record(buffer, [for (var s = 0; s < 500; s++) walkFix(s)]);
+      expect(buffer.history.single, hasLength(lessThan(10)));
+    });
+
+    test('folds less often once the history is long', () {
+      // A zigzag of 10 m teeth: simplification cannot drop any of it.
+      Fix zig(int i) => Fix(
+        time: t0.add(Duration(seconds: i)),
+        latitude: 32 + (i.isEven ? 0 : 10) / metersPerDegree,
+        longitude: 77 + i * 10 / (metersPerDegree * 0.848),
+      );
+      final buffer = TrackBuffer()
+        ..reset([
+          [for (var i = 0; i < 10000; i++) zig(i)],
+        ]);
+      expect(buffer.history.single, hasLength(10000));
+
+      var added = 0;
+      while (!buffer.tailIsLong) {
+        buffer.add(zig(10000 + added++));
+      }
+      // √10000 = 100 fixes rather than the 60 of a short journey.
+      expect(added, 100 + 1);
     });
 
     test('a new segment starts a separate tail', () {

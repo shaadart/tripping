@@ -4,11 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'app/frame_stats.dart';
+import 'app/history_screen.dart';
 import 'app/record_screen.dart';
+import 'app/share_gpx.dart';
 import 'app/system_access.dart';
 import 'app/theme.dart';
+import 'history/journey_history.dart';
 import 'journey/journey_store.dart';
 import 'map/journey_map.dart';
+import 'map/track_map.dart';
 import 'recording/geolocator_location.dart';
 import 'recording/location_source.dart';
 import 'recording/raw_fix_log.dart';
@@ -16,6 +21,7 @@ import 'recording/recorder.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (FrameStats.enabled) FrameStats.start();
   runApp(TrippingApp(home: await _openHome()));
 }
 
@@ -36,6 +42,14 @@ Future<Widget> _openHome() async {
       system: const ChannelSystemAccess(),
       mapBuilder: (state, now) =>
           JourneyMap(state: state, store: store, now: now),
+      historyBuilder: (_) {
+        final history = JourneyHistory(store);
+        return HistoryScreen(
+          history: history,
+          trackMapBuilder: (track) => TrackMap(track: track),
+          onExport: (past) => shareGpx(history, past),
+        );
+      },
     );
   } catch (error) {
     return StartupFailure(error: error);

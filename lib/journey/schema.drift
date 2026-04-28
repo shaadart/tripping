@@ -8,7 +8,16 @@ CREATE TABLE journeys (
   mode ENUMNAME(JourneyMode) NOT NULL,
   status ENUMNAME(JourneyStatus) NOT NULL,
   created_at INTEGER NOT NULL MAPPED BY `const UtcMillis()`,
-  ended_at INTEGER MAPPED BY `const UtcMillis()`
+  ended_at INTEGER MAPPED BY `const UtcMillis()`,
+  -- A summary derived from the track, cached for the journey list (v2).
+  -- NULL, or a summary_version older than the app's, means "derive again":
+  -- the track is the truth.
+  summary_version INTEGER,
+  meters REAL,
+  moving_ms INTEGER,
+  recorded_ms INTEGER,
+  -- JSON: per segment, a few [longitude, latitude] pairs for a thumbnail.
+  outline TEXT
 ) AS JourneyRow;
 
 -- At most one journey is active (recording or paused) on a device.

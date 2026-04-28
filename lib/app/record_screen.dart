@@ -6,6 +6,8 @@ import '../journey/journey.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
+import 'figure.dart';
+import 'format.dart';
 import 'system_access.dart';
 import 'theme.dart';
 
@@ -24,6 +26,7 @@ class RecordScreen extends StatefulWidget {
     required this.location,
     required this.system,
     required this.mapBuilder,
+    this.historyBuilder,
     this.clock = _utcNow,
   });
 
@@ -33,6 +36,9 @@ class RecordScreen extends StatefulWidget {
 
   /// Builds the map behind the panel; injected so tests need no platform map.
   final Widget Function(RecorderState state, DateTime now) mapBuilder;
+
+  /// Builds the list of past journeys, opened from the idle screen.
+  final WidgetBuilder? historyBuilder;
   final DateTime Function() clock;
 
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -169,8 +175,8 @@ class _RecordScreenState extends State<RecordScreen>
       final last = await widget.recorder.end();
       if (last != null) {
         _tell(
-          'Journey saved · ${_kilometres(last.meters)} · '
-          '${_duration(last.elapsedAt(widget.clock()))}',
+          'Journey saved · ${kilometres(last.meters)} · '
+          '${clockTime(last.elapsedAt(widget.clock()))}',
         );
       }
     } catch (error) {
@@ -303,6 +309,16 @@ class _RecordScreenState extends State<RecordScreen>
           icon: const Icon(Icons.hiking),
           label: const Text('Expedition'),
         ),
+        if (widget.historyBuilder case final history?) ...[
+          const SizedBox(height: 4),
+          TextButton.icon(
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute<void>(builder: history)),
+            icon: const Icon(Icons.history),
+            label: const Text('Past journeys'),
+          ),
+        ],
       ],
       Recording() => [
         FilledButton.icon(
@@ -343,15 +359,15 @@ class _Header extends StatelessWidget {
     final (label, color) = switch (state) {
       Idle() => ('Tripping', scheme.onSurface),
       Recording(:final journey) => (
-        'Recording · ${_modeName(journey.mode)}',
+        'Recording · ${modeName(journey.mode)}',
         scheme.primary,
       ),
       Paused(:final journey) => (
-        'Paused · ${_modeName(journey.mode)}',
+        'Paused · ${modeName(journey.mode)}',
         scheme.onSurfaceVariant,
       ),
       Interrupted(:final journey) => (
-        'Stopped · ${_modeName(journey.mode)}',
+        'Stopped · ${modeName(journey.mode)}',
         warningColor(context),
       ),
     };
@@ -407,57 +423,18 @@ class _Readout extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _Figure(
-            value: _duration(progress.elapsedAt(now)),
+          child: Figure(
+            value: clockTime(progress.elapsedAt(now)),
             label: 'Time',
           ),
         ),
         Expanded(
-          child: _Figure(
-            value: _kilometres(progress.meters),
-            label: 'Distance',
-          ),
+          child: Figure(value: kilometres(progress.meters), label: 'Distance'),
         ),
         Expanded(
-          child: _Figure(
-            value: _duration(progress.movingTime),
-            label: 'Moving',
-          ),
+          child: Figure(value: clockTime(progress.movingTime), label: 'Moving'),
         ),
       ],
-    );
-  }
-}
-
-class _Figure extends StatelessWidget {
-  const _Figure({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Semantics(
-      label: '$label $value',
-      excludeSemantics: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: text.headlineMedium?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          Text(
-            label,
-            style: text.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -546,7 +523,7 @@ class _StatusLine extends StatelessWidget {
       final waited = since == null ? Duration.zero : now.difference(since);
       if (waited > _noFixAfter) {
         return (
-          'No GPS fix yet after ${_age(waited)}. Fixes take longer indoors; '
+          'No GPS fix yet after ${age(waited)}. Fixes take longer indoors; '
               'check that location is on.',
           true,
           null,
@@ -556,7 +533,7 @@ class _StatusLine extends StatelessWidget {
     }
     final quiet = now.difference(arrived);
     if (quiet > _quietAfter) {
-      return ('No GPS fix for ${_age(quiet)}', true, null);
+      return ('No GPS fix for ${age(quiet)}', true, null);
     }
     final accuracy = fix.accuracy;
     final ceiling = TrackPolicy.of(state.journey.mode).maxAccuracy;
@@ -578,7 +555,7 @@ class _StatusLine extends StatelessWidget {
     BuildContext context,
     DateTime stoppedAt,
   ) {
-    final time = _timeOfDay(context, stoppedAt);
+    final time = timeOfDay(context, stoppedAt);
     // The process that ended the recording is the first to exit after the
     // last saved fix; later exits (an update, a crash days later) are not
     // the cause. The fix carries GPS time, so allow some clock skew.
@@ -744,28 +721,3 @@ class _AccessProblem extends StatelessWidget {
     );
   }
 }
-
-String _modeName(JourneyMode mode) => switch (mode) {
-  JourneyMode.road => 'Road journey',
-  JourneyMode.expedition => 'Expedition',
-};
-
-String _kilometres(double meters) => '${(meters / 1000).toStringAsFixed(2)} km';
-
-String _duration(Duration duration) {
-  final hours = duration.inHours;
-  final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
-  final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-  return '$hours:$minutes:$seconds';
-}
-
-String _age(Duration age) {
-  if (age.inSeconds < 60) return '${age.inSeconds} s';
-  if (age.inMinutes < 60) return '${age.inMinutes} min';
-  return '${age.inHours} h ${age.inMinutes % 60} min';
-}
-
-String _timeOfDay(BuildContext context, DateTime time) =>
-    MaterialLocalizations.of(
-      context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(time.toLocal()));

@@ -49,10 +49,23 @@ class JourneyStore extends _$JourneyStore {
   static const _uuid = Uuid();
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        for (final column in <GeneratedColumn>[
+          journeys.summaryVersion,
+          journeys.meters,
+          journeys.movingMs,
+          journeys.recordedMs,
+          journeys.outline,
+        ]) {
+          await m.addColumn(journeys, column);
+        }
+      }
+    },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );
 
@@ -70,6 +83,32 @@ class JourneyStore extends _$JourneyStore {
   Future<List<JourneyRow>> allJourneys() => (select(
     journeys,
   )..orderBy([(j) => OrderingTerm.desc(j.createdAt)])).get();
+
+  /// Journeys that have ended, newest first.
+  Future<List<JourneyRow>> endedJourneys() =>
+      (select(journeys)
+            ..where((j) => j.status.equalsValue(JourneyStatus.ended))
+            ..orderBy([(j) => OrderingTerm.desc(j.createdAt)]))
+          .get();
+
+  /// Caches a summary derived from an ended journey's track. [version] says
+  /// which rules derived it, so a newer app can derive it again.
+  Future<void> saveSummary(
+    int journeyId, {
+    required int version,
+    required double meters,
+    required Duration movingTime,
+    required Duration recordedTime,
+    required String outline,
+  }) => (update(journeys)..where((j) => j.id.equals(journeyId))).write(
+    JourneysCompanion(
+      summaryVersion: Value(version),
+      meters: Value(meters),
+      movingMs: Value(movingTime.inMilliseconds),
+      recordedMs: Value(recordedTime.inMilliseconds),
+      outline: Value(outline),
+    ),
+  );
 
   /// Creates a journey that is recording from [at], with its first segment
   /// open. Throws [StateError] if another journey is still active.

@@ -48,6 +48,7 @@ void main() {
           location: location,
           system: system,
           mapBuilder: (_, _) => const SizedBox.expand(),
+          historyBuilder: (_) => const Scaffold(body: Text('History here')),
           clock: () => now,
         ),
       ),
@@ -65,6 +66,15 @@ void main() {
 
   Future<void> tap(WidgetTester tester, String label) =>
       act(tester, () async => tester.tap(find.text(label)));
+
+  testWidgets('idle opens past journeys', (tester) async {
+    await show(tester);
+
+    await tester.tap(find.text('Past journeys'));
+    await tester.pumpAndSettle();
+    expect(find.text('History here'), findsOneWidget);
+    await cleanUp(tester);
+  });
 
   testWidgets('idle offers both kinds of journey', (tester) async {
     await show(tester);

@@ -62,6 +62,59 @@ class Journeys extends Table with TableInfo<Journeys, JourneyRow> {
         requiredDuringInsert: false,
         $customConstraints: '',
       ).withConverter<DateTime?>(Journeys.$converterendedAtn);
+  static const VerificationMeta _summaryVersionMeta = const VerificationMeta(
+    'summaryVersion',
+  );
+  late final GeneratedColumn<int> summaryVersion = GeneratedColumn<int>(
+    'summary_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _metersMeta = const VerificationMeta('meters');
+  late final GeneratedColumn<double> meters = GeneratedColumn<double>(
+    'meters',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _movingMsMeta = const VerificationMeta(
+    'movingMs',
+  );
+  late final GeneratedColumn<int> movingMs = GeneratedColumn<int>(
+    'moving_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _recordedMsMeta = const VerificationMeta(
+    'recordedMs',
+  );
+  late final GeneratedColumn<int> recordedMs = GeneratedColumn<int>(
+    'recorded_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  static const VerificationMeta _outlineMeta = const VerificationMeta(
+    'outline',
+  );
+  late final GeneratedColumn<String> outline = GeneratedColumn<String>(
+    'outline',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -70,6 +123,11 @@ class Journeys extends Table with TableInfo<Journeys, JourneyRow> {
     status,
     createdAt,
     endedAt,
+    summaryVersion,
+    meters,
+    movingMs,
+    recordedMs,
+    outline,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -93,6 +151,39 @@ class Journeys extends Table with TableInfo<Journeys, JourneyRow> {
       );
     } else if (isInserting) {
       context.missing(_uuidMeta);
+    }
+    if (data.containsKey('summary_version')) {
+      context.handle(
+        _summaryVersionMeta,
+        summaryVersion.isAcceptableOrUnknown(
+          data['summary_version']!,
+          _summaryVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('meters')) {
+      context.handle(
+        _metersMeta,
+        meters.isAcceptableOrUnknown(data['meters']!, _metersMeta),
+      );
+    }
+    if (data.containsKey('moving_ms')) {
+      context.handle(
+        _movingMsMeta,
+        movingMs.isAcceptableOrUnknown(data['moving_ms']!, _movingMsMeta),
+      );
+    }
+    if (data.containsKey('recorded_ms')) {
+      context.handle(
+        _recordedMsMeta,
+        recordedMs.isAcceptableOrUnknown(data['recorded_ms']!, _recordedMsMeta),
+      );
+    }
+    if (data.containsKey('outline')) {
+      context.handle(
+        _outlineMeta,
+        outline.isAcceptableOrUnknown(data['outline']!, _outlineMeta),
+      );
     }
     return context;
   }
@@ -135,6 +226,26 @@ class Journeys extends Table with TableInfo<Journeys, JourneyRow> {
           data['${effectivePrefix}ended_at'],
         ),
       ),
+      summaryVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}summary_version'],
+      ),
+      meters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}meters'],
+      ),
+      movingMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}moving_ms'],
+      ),
+      recordedMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}recorded_ms'],
+      ),
+      outline: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}outline'],
+      ),
     );
   }
 
@@ -162,6 +273,17 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
   final JourneyStatus status;
   final DateTime createdAt;
   final DateTime? endedAt;
+
+  /// A summary derived from the track, cached for the journey list (v2).
+  /// NULL, or a summary_version older than the app's, means "derive again":
+  /// the track is the truth.
+  final int? summaryVersion;
+  final double? meters;
+  final int? movingMs;
+  final int? recordedMs;
+
+  /// JSON: per segment, a few [longitude, latitude] pairs for a thumbnail.
+  final String? outline;
   const JourneyRow({
     required this.id,
     required this.uuid,
@@ -169,6 +291,11 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
     required this.status,
     required this.createdAt,
     this.endedAt,
+    this.summaryVersion,
+    this.meters,
+    this.movingMs,
+    this.recordedMs,
+    this.outline,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -191,6 +318,21 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
         Journeys.$converterendedAtn.toSql(endedAt),
       );
     }
+    if (!nullToAbsent || summaryVersion != null) {
+      map['summary_version'] = Variable<int>(summaryVersion);
+    }
+    if (!nullToAbsent || meters != null) {
+      map['meters'] = Variable<double>(meters);
+    }
+    if (!nullToAbsent || movingMs != null) {
+      map['moving_ms'] = Variable<int>(movingMs);
+    }
+    if (!nullToAbsent || recordedMs != null) {
+      map['recorded_ms'] = Variable<int>(recordedMs);
+    }
+    if (!nullToAbsent || outline != null) {
+      map['outline'] = Variable<String>(outline);
+    }
     return map;
   }
 
@@ -204,6 +346,21 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
       endedAt: endedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(endedAt),
+      summaryVersion: summaryVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summaryVersion),
+      meters: meters == null && nullToAbsent
+          ? const Value.absent()
+          : Value(meters),
+      movingMs: movingMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(movingMs),
+      recordedMs: recordedMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recordedMs),
+      outline: outline == null && nullToAbsent
+          ? const Value.absent()
+          : Value(outline),
     );
   }
 
@@ -223,6 +380,11 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
       ),
       createdAt: serializer.fromJson<DateTime>(json['created_at']),
       endedAt: serializer.fromJson<DateTime?>(json['ended_at']),
+      summaryVersion: serializer.fromJson<int?>(json['summary_version']),
+      meters: serializer.fromJson<double?>(json['meters']),
+      movingMs: serializer.fromJson<int?>(json['moving_ms']),
+      recordedMs: serializer.fromJson<int?>(json['recorded_ms']),
+      outline: serializer.fromJson<String?>(json['outline']),
     );
   }
   @override
@@ -237,6 +399,11 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
       ),
       'created_at': serializer.toJson<DateTime>(createdAt),
       'ended_at': serializer.toJson<DateTime?>(endedAt),
+      'summary_version': serializer.toJson<int?>(summaryVersion),
+      'meters': serializer.toJson<double?>(meters),
+      'moving_ms': serializer.toJson<int?>(movingMs),
+      'recorded_ms': serializer.toJson<int?>(recordedMs),
+      'outline': serializer.toJson<String?>(outline),
     };
   }
 
@@ -247,6 +414,11 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
     JourneyStatus? status,
     DateTime? createdAt,
     Value<DateTime?> endedAt = const Value.absent(),
+    Value<int?> summaryVersion = const Value.absent(),
+    Value<double?> meters = const Value.absent(),
+    Value<int?> movingMs = const Value.absent(),
+    Value<int?> recordedMs = const Value.absent(),
+    Value<String?> outline = const Value.absent(),
   }) => JourneyRow(
     id: id ?? this.id,
     uuid: uuid ?? this.uuid,
@@ -254,6 +426,13 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
     status: status ?? this.status,
     createdAt: createdAt ?? this.createdAt,
     endedAt: endedAt.present ? endedAt.value : this.endedAt,
+    summaryVersion: summaryVersion.present
+        ? summaryVersion.value
+        : this.summaryVersion,
+    meters: meters.present ? meters.value : this.meters,
+    movingMs: movingMs.present ? movingMs.value : this.movingMs,
+    recordedMs: recordedMs.present ? recordedMs.value : this.recordedMs,
+    outline: outline.present ? outline.value : this.outline,
   );
   JourneyRow copyWithCompanion(JourneysCompanion data) {
     return JourneyRow(
@@ -263,6 +442,15 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
       status: data.status.present ? data.status.value : this.status,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
+      summaryVersion: data.summaryVersion.present
+          ? data.summaryVersion.value
+          : this.summaryVersion,
+      meters: data.meters.present ? data.meters.value : this.meters,
+      movingMs: data.movingMs.present ? data.movingMs.value : this.movingMs,
+      recordedMs: data.recordedMs.present
+          ? data.recordedMs.value
+          : this.recordedMs,
+      outline: data.outline.present ? data.outline.value : this.outline,
     );
   }
 
@@ -274,13 +462,30 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
           ..write('mode: $mode, ')
           ..write('status: $status, ')
           ..write('createdAt: $createdAt, ')
-          ..write('endedAt: $endedAt')
+          ..write('endedAt: $endedAt, ')
+          ..write('summaryVersion: $summaryVersion, ')
+          ..write('meters: $meters, ')
+          ..write('movingMs: $movingMs, ')
+          ..write('recordedMs: $recordedMs, ')
+          ..write('outline: $outline')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, uuid, mode, status, createdAt, endedAt);
+  int get hashCode => Object.hash(
+    id,
+    uuid,
+    mode,
+    status,
+    createdAt,
+    endedAt,
+    summaryVersion,
+    meters,
+    movingMs,
+    recordedMs,
+    outline,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -290,7 +495,12 @@ class JourneyRow extends DataClass implements Insertable<JourneyRow> {
           other.mode == this.mode &&
           other.status == this.status &&
           other.createdAt == this.createdAt &&
-          other.endedAt == this.endedAt);
+          other.endedAt == this.endedAt &&
+          other.summaryVersion == this.summaryVersion &&
+          other.meters == this.meters &&
+          other.movingMs == this.movingMs &&
+          other.recordedMs == this.recordedMs &&
+          other.outline == this.outline);
 }
 
 class JourneysCompanion extends UpdateCompanion<JourneyRow> {
@@ -300,6 +510,11 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
   final Value<JourneyStatus> status;
   final Value<DateTime> createdAt;
   final Value<DateTime?> endedAt;
+  final Value<int?> summaryVersion;
+  final Value<double?> meters;
+  final Value<int?> movingMs;
+  final Value<int?> recordedMs;
+  final Value<String?> outline;
   const JourneysCompanion({
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
@@ -307,6 +522,11 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
     this.status = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.endedAt = const Value.absent(),
+    this.summaryVersion = const Value.absent(),
+    this.meters = const Value.absent(),
+    this.movingMs = const Value.absent(),
+    this.recordedMs = const Value.absent(),
+    this.outline = const Value.absent(),
   });
   JourneysCompanion.insert({
     this.id = const Value.absent(),
@@ -315,6 +535,11 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
     required JourneyStatus status,
     required DateTime createdAt,
     this.endedAt = const Value.absent(),
+    this.summaryVersion = const Value.absent(),
+    this.meters = const Value.absent(),
+    this.movingMs = const Value.absent(),
+    this.recordedMs = const Value.absent(),
+    this.outline = const Value.absent(),
   }) : uuid = Value(uuid),
        mode = Value(mode),
        status = Value(status),
@@ -326,6 +551,11 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
     Expression<String>? status,
     Expression<int>? createdAt,
     Expression<int>? endedAt,
+    Expression<int>? summaryVersion,
+    Expression<double>? meters,
+    Expression<int>? movingMs,
+    Expression<int>? recordedMs,
+    Expression<String>? outline,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -334,6 +564,11 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
       if (status != null) 'status': status,
       if (createdAt != null) 'created_at': createdAt,
       if (endedAt != null) 'ended_at': endedAt,
+      if (summaryVersion != null) 'summary_version': summaryVersion,
+      if (meters != null) 'meters': meters,
+      if (movingMs != null) 'moving_ms': movingMs,
+      if (recordedMs != null) 'recorded_ms': recordedMs,
+      if (outline != null) 'outline': outline,
     });
   }
 
@@ -344,6 +579,11 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
     Value<JourneyStatus>? status,
     Value<DateTime>? createdAt,
     Value<DateTime?>? endedAt,
+    Value<int?>? summaryVersion,
+    Value<double?>? meters,
+    Value<int?>? movingMs,
+    Value<int?>? recordedMs,
+    Value<String?>? outline,
   }) {
     return JourneysCompanion(
       id: id ?? this.id,
@@ -352,6 +592,11 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       endedAt: endedAt ?? this.endedAt,
+      summaryVersion: summaryVersion ?? this.summaryVersion,
+      meters: meters ?? this.meters,
+      movingMs: movingMs ?? this.movingMs,
+      recordedMs: recordedMs ?? this.recordedMs,
+      outline: outline ?? this.outline,
     );
   }
 
@@ -382,6 +627,21 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
         Journeys.$converterendedAtn.toSql(endedAt.value),
       );
     }
+    if (summaryVersion.present) {
+      map['summary_version'] = Variable<int>(summaryVersion.value);
+    }
+    if (meters.present) {
+      map['meters'] = Variable<double>(meters.value);
+    }
+    if (movingMs.present) {
+      map['moving_ms'] = Variable<int>(movingMs.value);
+    }
+    if (recordedMs.present) {
+      map['recorded_ms'] = Variable<int>(recordedMs.value);
+    }
+    if (outline.present) {
+      map['outline'] = Variable<String>(outline.value);
+    }
     return map;
   }
 
@@ -393,7 +653,12 @@ class JourneysCompanion extends UpdateCompanion<JourneyRow> {
           ..write('mode: $mode, ')
           ..write('status: $status, ')
           ..write('createdAt: $createdAt, ')
-          ..write('endedAt: $endedAt')
+          ..write('endedAt: $endedAt, ')
+          ..write('summaryVersion: $summaryVersion, ')
+          ..write('meters: $meters, ')
+          ..write('movingMs: $movingMs, ')
+          ..write('recordedMs: $recordedMs, ')
+          ..write('outline: $outline')
           ..write(')'))
         .toString();
   }
