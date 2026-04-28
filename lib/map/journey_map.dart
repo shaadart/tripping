@@ -108,11 +108,12 @@ class _JourneyMapState extends State<JourneyMap> {
     _serially(() async {
       final map = _map!;
       final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
+      final line = trackLine(context);
       for (final source in [_historySource, _tailSource, _positionSource]) {
         await map.addGeoJsonSource(source, trackFeatures(const []));
       }
       for (final source in [_historySource, _tailSource]) {
-        await map.addLineLayer(source, '$source-line', trackLine(ember));
+        await map.addLineLayer(source, '$source-line', line);
       }
       await map.addCircleLayer(
         _positionSource,
@@ -178,6 +179,11 @@ class _JourneyMapState extends State<JourneyMap> {
       await _drawHistory(map);
       await _drawTail(map);
       await _fitTrack(map);
+      if (journey == null) {
+        // Between journeys it is a plain map again: north up and flat.
+        await map.animateCamera(CameraUpdate.bearingTo(0));
+        await map.animateCamera(CameraUpdate.tiltTo(0));
+      }
     }
 
     if (state is Recording) {

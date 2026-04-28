@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import '../app/theme.dart';
 import '../journey/journey.dart';
 import 'track_geometry.dart';
 
-/// The bundled basemap style for the current theme. Bundled, so the map and
+/// The bundled basemap style for the current look. Bundled, so the map and
 /// everything drawn on it work without the style server; only the tiles
 /// need the network.
-String mapStyleFor(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark
-    ? 'assets/map/dark.json'
-    : 'assets/map/positron.json';
+String mapStyleFor(BuildContext context) => lookOf(context).mapStyle;
 
-/// How every recorded track is drawn.
-LineLayerProperties trackLine(String color) => LineLayerProperties(
-  lineColor: color,
-  lineWidth: 5,
+/// How every recorded track is drawn in the current look.
+LineLayerProperties trackLine(BuildContext context) => LineLayerProperties(
+  lineColor: Theme.of(context).colorScheme.primary.toHexStringRGB(),
+  lineWidth: lookOf(context).trackWidth,
   lineCap: 'round',
   lineJoin: 'round',
 );

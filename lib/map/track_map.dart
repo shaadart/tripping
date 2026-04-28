@@ -50,8 +50,9 @@ class _TrackMapState extends State<TrackMap> {
     if (_drawing) return;
     _drawing = true;
     final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
+    final line = trackLine(context);
     await map.addGeoJsonSource('track', trackFeatures(track));
-    await map.addLineLayer('track', 'track-line', trackLine(ember));
+    await map.addLineLayer('track', 'track-line', line);
     await map.addGeoJsonSource('ends', endsFeatures(track));
     await map.addCircleLayer(
       'ends',

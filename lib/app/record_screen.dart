@@ -32,6 +32,7 @@ class RecordScreen extends StatefulWidget {
     required this.system,
     required this.mapBuilder,
     this.historyBuilder,
+    this.onToggleHighSun,
     this.clock = _utcNow,
   });
 
@@ -44,6 +45,9 @@ class RecordScreen extends StatefulWidget {
 
   /// Builds the list of past journeys, opened from the idle screen.
   final WidgetBuilder? historyBuilder;
+
+  /// Switches the high-contrast look for bright daylight on or off.
+  final VoidCallback? onToggleHighSun;
   final DateTime Function() clock;
 
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -215,18 +219,26 @@ class _RecordScreenState extends State<RecordScreen>
                     bottom: false,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: scheme.surface.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
+                      child: Row(
+                        children: [
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: scheme.surface.withValues(alpha: 0.92),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              child: _Header(state: state),
+                            ),
                           ),
-                          child: _Header(state: state),
-                        ),
+                          if (widget.onToggleHighSun case final toggle?) ...[
+                            const SizedBox(width: 8),
+                            _HighSunButton(onPressed: toggle),
+                          ],
+                        ],
                       ),
                     ),
                   ),
@@ -325,27 +337,29 @@ class _RecordScreenState extends State<RecordScreen>
         ],
       ],
       Recording() => [
-        FilledButton.icon(
-          onPressed: enabled ? _pause : null,
-          icon: const Icon(Icons.pause),
-          label: const Text('Pause'),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: enabled ? _end : null,
-          child: const Text('End journey'),
+        _ActionPair(
+          FilledButton.icon(
+            onPressed: enabled ? _pause : null,
+            icon: const Icon(Icons.pause),
+            label: const Text('Pause'),
+          ),
+          OutlinedButton(
+            onPressed: enabled ? _end : null,
+            child: const Text('End journey'),
+          ),
         ),
       ],
       Paused() || Interrupted() => [
-        FilledButton.icon(
-          onPressed: enabled ? () => _askFor(recorder.resume) : null,
-          icon: const Icon(Icons.play_arrow),
-          label: const Text('Resume'),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: enabled ? _end : null,
-          child: const Text('End journey'),
+        _ActionPair(
+          FilledButton.icon(
+            onPressed: enabled ? () => _askFor(recorder.resume) : null,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Resume'),
+          ),
+          OutlinedButton(
+            onPressed: enabled ? _end : null,
+            child: const Text('End journey'),
+          ),
         ),
       ],
     };
@@ -389,6 +403,56 @@ class _Header extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Two actions side by side, leaving more of the screen to the map; one
+/// above the other when large text would not fit.
+class _ActionPair extends StatelessWidget {
+  const _ActionPair(this.first, this.second);
+
+  final Widget first;
+  final Widget second;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.textScalerOf(context).scale(18) > 22) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [first, const SizedBox(height: 12), second],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: first),
+        const SizedBox(width: 12),
+        Expanded(child: second),
+      ],
+    );
+  }
+}
+
+/// Switches the high-contrast look for direct sunlight; filled while on.
+class _HighSunButton extends StatelessWidget {
+  const _HighSunButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final on = lookOf(context).look == Look.highSun;
+    return Material(
+      color: scheme.surface.withValues(alpha: 0.92),
+      shape: const CircleBorder(),
+      child: IconButton(
+        onPressed: onPressed,
+        isSelected: on,
+        icon: const Icon(Icons.wb_sunny_outlined),
+        selectedIcon: const Icon(Icons.wb_sunny),
+        tooltip: on ? 'High-sun mode on' : 'High-sun mode',
+      ),
     );
   }
 }

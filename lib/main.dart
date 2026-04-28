@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app/frame_stats.dart';
 import 'app/history_screen.dart';
 import 'app/record_screen.dart';
+import 'app/settings.dart';
 import 'app/share_gpx.dart';
 import 'app/system_access.dart';
 import 'app/theme.dart';
@@ -23,14 +24,20 @@ import 'recording/recorder.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (FrameStats.enabled) FrameStats.start();
-  runApp(TrippingApp(home: await _openHome()));
+  final highSun = ValueNotifier(false);
+  runApp(TrippingApp(home: await _openHome(highSun), highSun: highSun));
 }
 
 /// The composition root: builds the long-lived objects once. Opening the
 /// recorder also recovers a journey interrupted by a process death.
-Future<Widget> _openHome() async {
+Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
   try {
     final documents = await getApplicationDocumentsDirectory();
+    final settings = await Settings.open(
+      File('${documents.path}/settings.json'),
+    );
+    highSun.value = settings.highSun.value;
+    settings.highSun.addListener(() => highSun.value = settings.highSun.value);
     // A bench build measures on its own database, never the owner's.
     final file = File(
       '${documents.path}/'
@@ -49,6 +56,7 @@ Future<Widget> _openHome() async {
       system: const ChannelSystemAccess(),
       mapBuilder: (state, now) =>
           JourneyMap(state: state, store: store, now: now),
+      onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
       historyBuilder: (_) {
         final history = JourneyHistory(store);
         return HistoryScreen(
@@ -69,18 +77,26 @@ Future<Widget> _openHome() async {
 }
 
 class TrippingApp extends StatelessWidget {
-  const TrippingApp({super.key, required this.home});
+  const TrippingApp({super.key, required this.home, this.highSun});
 
   final Widget home;
 
+  /// When on, the high-sun look replaces both the light and the dark one.
+  final ValueListenable<bool>? highSun;
+
+  static final _off = ValueNotifier(false);
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Tripping',
-      theme: trippingTheme(Brightness.light),
-      darkTheme: trippingTheme(Brightness.dark),
-      debugShowCheckedModeBanner: false,
-      home: home,
+    return ValueListenableBuilder(
+      valueListenable: highSun ?? _off,
+      builder: (context, sun, _) => MaterialApp(
+        title: 'Tripping',
+        theme: trippingLook(sun ? Look.highSun : Look.light),
+        darkTheme: trippingLook(sun ? Look.highSun : Look.dark),
+        debugShowCheckedModeBanner: false,
+        home: home,
+      ),
     );
   }
 }

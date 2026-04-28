@@ -19,6 +19,7 @@ void main() {
   late FakeSystemAccess system;
   late Recorder recorder;
   late DateTime now;
+  var sunToggles = 0;
 
   setUp(() {
     store = FlakyStore(NativeDatabase.memory());
@@ -50,6 +51,7 @@ void main() {
           system: system,
           mapBuilder: (_, _) => const SizedBox.expand(),
           historyBuilder: (_) => const Scaffold(body: Text('History here')),
+          onToggleHighSun: () => sunToggles++,
           clock: () => now,
         ),
       ),
@@ -67,6 +69,39 @@ void main() {
 
   Future<void> tap(WidgetTester tester, String label) =>
       act(tester, () async => tester.tap(find.text(label)));
+
+  testWidgets('the sun button asks for the high-sun look', (tester) async {
+    sunToggles = 0;
+    await show(tester);
+    await tester.tap(find.byTooltip('High-sun mode'));
+    expect(sunToggles, 1);
+    await cleanUp(tester);
+  });
+
+  testWidgets('pause and end sit side by side', (tester) async {
+    await show(tester);
+    await tap(tester, 'Expedition');
+    expect(
+      tester.getCenter(find.text('Pause')).dy,
+      closeTo(tester.getCenter(find.text('End journey')).dy, 1),
+    );
+    await cleanUp(tester);
+  });
+
+  testWidgets('with large text, pause and end stack instead', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await show(tester);
+    // The panel scrolls rather than overflow at this size.
+    await tester.ensureVisible(find.text('Expedition'));
+    await tester.pumpAndSettle();
+    await tap(tester, 'Expedition');
+    expect(
+      tester.getCenter(find.text('Pause')).dy,
+      lessThan(tester.getCenter(find.text('End journey')).dy),
+    );
+    await cleanUp(tester);
+  });
 
   testWidgets('idle opens past journeys', (tester) async {
     await show(tester);
