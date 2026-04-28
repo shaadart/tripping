@@ -9,14 +9,31 @@ import 'package:tripping/map/offline_maps.dart';
 
 /// Offline areas held in memory; downloads are driven by the test.
 class FakeOfflineMaps implements OfflineMaps {
-  FakeOfflineMaps([List<OfflineMap>? areas]) : areas = areas ?? [];
+  FakeOfflineMaps([List<OfflineMap>? areas, this.newest = 'r1'])
+    : areas = areas ?? [];
 
   final List<OfflineMap> areas;
+
+  /// The newest release the network reports; null for no connection.
+  String? newest;
   final downloads = <(String, Area)>[];
   StreamController<double>? running;
+  StreamController<double>? updating;
 
   @override
-  Future<List<OfflineMap>> list() async => [...areas];
+  final ValueNotifier<List<OfflineMap>> saved = ValueNotifier(const []);
+
+  @override
+  Future<List<OfflineMap>> list() async => saved.value = [...areas];
+
+  @override
+  Future<String?> newestRelease() async => newest;
+
+  @override
+  Stream<double> updateAll() {
+    updating = StreamController<double>();
+    return updating!.stream;
+  }
 
   @override
   Stream<double> download(String name, Area area) {
@@ -54,6 +71,8 @@ void main() {
   late Area shown;
 
   Future<void> show(WidgetTester tester, FakeOfflineMaps maps) async {
+    // A fresh screen each time, not one reused with new data.
+    await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(
       MaterialApp(
         theme: trippingTheme(Brightness.light),
@@ -151,6 +170,70 @@ void main() {
       findsOneWidget,
     );
     expect(downloadButton(), findsOneWidget);
+  });
+
+  group('newer map data', () {
+    testWidgets('is offered only when the network says so', (tester) async {
+      await show(tester, FakeOfflineMaps([saved(1, 'Spiti valley')], 'r1'));
+      expect(find.text('Newer map data is available'), findsNothing);
+
+      await show(tester, FakeOfflineMaps([saved(1, 'Spiti valley')], null));
+      expect(find.text('Newer map data is available'), findsNothing);
+
+      await show(tester, FakeOfflineMaps([saved(1, 'Spiti valley')], 'r2'));
+      expect(find.text('Newer map data is available'), findsOneWidget);
+      expect(find.textContaining('One saved area uses'), findsOneWidget);
+    });
+
+    testWidgets('updates all, with progress', (tester) async {
+      final maps = FakeOfflineMaps([saved(1, 'Spiti valley')], 'r2');
+      await show(tester, maps);
+      await tester.tap(find.text('Update all'));
+      await tester.pump();
+      maps.updating!.add(0.5);
+      await tester.pump();
+      expect(find.text('Updating… 50 %'), findsOneWidget);
+
+      maps.areas
+        ..clear()
+        ..add(
+          OfflineMap(
+            id: 2,
+            name: 'Spiti valley',
+            area: city,
+            release: 'r2',
+            savedAt: DateTime.utc(2026, 10, 29),
+            bytes: 5000000,
+            complete: true,
+            progress: 1,
+          ),
+        );
+      maps.updating!.add(1);
+      unawaited(maps.updating!.close());
+      await tester.pumpAndSettle();
+      expect(find.text('Offline maps updated'), findsOneWidget);
+      expect(find.text('Newer map data is available'), findsNothing);
+    });
+
+    testWidgets('a failed update changes nothing and says so', (tester) async {
+      final maps = FakeOfflineMaps([saved(1, 'Spiti valley')], 'r2');
+      await show(tester, maps);
+      await tester.tap(find.text('Update all'));
+      await tester.pump();
+      maps.updating!.addError(
+        const OfflineMapError('Downloading needs an internet connection.'),
+      );
+      unawaited(maps.updating!.close());
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Downloading needs an internet connection. Nothing was changed.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Spiti valley'), findsOneWidget);
+      expect(find.text('Update all'), findsOneWidget);
+    });
   });
 }
 

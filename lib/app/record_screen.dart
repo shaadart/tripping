@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
+import '../map/offline_area.dart';
+import '../map/offline_maps.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
@@ -35,6 +38,7 @@ class RecordScreen extends StatefulWidget {
     this.waypoints,
     this.historyBuilder,
     this.offlineMapsBuilder,
+    this.savedOffline,
     this.onToggleHighSun,
     this.clock = _utcNow,
   });
@@ -54,6 +58,9 @@ class RecordScreen extends StatefulWidget {
 
   /// Builds the offline maps screen: areas kept for use without signal.
   final WidgetBuilder? offlineMapsBuilder;
+
+  /// The offline areas saved, to say when the journey is inside one.
+  final ValueListenable<List<OfflineMap>>? savedOffline;
 
   /// Switches the high-contrast look for bright daylight on or off.
   final VoidCallback? onToggleHighSun;
@@ -342,6 +349,8 @@ class _RecordScreenState extends State<RecordScreen>
                             .openSettingsFor(LocationAccess.serviceOff),
                         onOpenAppSettings: widget.system.openAppSettings,
                       ),
+                      if (widget.savedOffline case final saved?)
+                        _SavedHere(state: state, saved: saved),
                       _Coordinates(state: state, now: now),
                       _SystemNotes(
                         state: state,
@@ -644,6 +653,57 @@ class _Readout extends StatelessWidget {
       latestFix.speed,
     _ => null,
   };
+}
+
+/// Says so when the journey is inside an area saved for offline use: the
+/// map there keeps working without signal.
+class _SavedHere extends StatelessWidget {
+  const _SavedHere({required this.state, required this.saved});
+
+  final RecorderState state;
+  final ValueListenable<List<OfflineMap>> saved;
+
+  @override
+  Widget build(BuildContext context) {
+    final fix = switch (state) {
+      Recording(:final latestFix?) => latestFix,
+      Recording(:final progress) ||
+      Paused(:final progress) ||
+      Interrupted(:final progress) => progress.lastFix,
+      Idle() => null,
+    };
+    if (fix == null) return const SizedBox.shrink();
+    return ValueListenableBuilder(
+      valueListenable: saved,
+      builder: (context, areas, _) {
+        final inside = areas.any(
+          (area) =>
+              area.complete && covers(area.area, fix.latitude, fix.longitude),
+        );
+        if (!inside) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              Icon(
+                Icons.offline_pin_outlined,
+                size: 18,
+                color: scheme.tertiary,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Offline map saved for this area',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// On an expedition, the position as coordinates, on demand: to tell

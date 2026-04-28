@@ -51,10 +51,17 @@ class MapTiles {
   Directory _dir(String? release) =>
       Directory('${_root.path}/${release ?? 'index'}');
 
+  /// Test builds only (`--dart-define=TRIPPING_PRETEND_RELEASE=<release>`):
+  /// treat an older, still-served release as the newest, to exercise
+  /// "update all" on a device without waiting a week. Empty in normal
+  /// builds.
+  static const _pretend = String.fromEnvironment('TRIPPING_PRETEND_RELEASE');
+
   /// The newest release named by the index, or null without a connection.
   static Future<String?> latest({
     Duration timeout = const Duration(seconds: 8),
   }) async {
+    if (_pretend.isNotEmpty) return _pretend;
     final client = HttpClient()
       ..userAgent = userAgent
       ..connectionTimeout = timeout;

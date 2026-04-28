@@ -53,3 +53,10 @@ bool fitsOneDownload(Area area) {
   return tiles <= OfflineLimits.tiles &&
       estimatedBytes(tiles) <= OfflineLimits.bytes;
 }
+
+/// Whether the point lies inside [area].
+bool covers(Area area, double latitude, double longitude) =>
+    latitude >= area.south &&
+    latitude <= area.north &&
+    longitude >= area.west &&
+    longitude <= area.east;

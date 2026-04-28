@@ -56,6 +56,8 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
     await setOfflineMaxConcurrentRequests(
       maxRequestsPerHost: OfflineLimits.parallelRequests,
     );
+    // Listing fills `offline.saved`, which the trip panel watches.
+    unawaited(offline.list());
     unawaited(
       tiles.settle(
         hasOfflineMaps: () async => (await offline.list()).isNotEmpty,
@@ -81,6 +83,7 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
           JourneyMap(state: state, store: store, now: now),
       waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
+      savedOffline: offline.saved,
       offlineMapsBuilder: (_) => OfflineMapsScreen(
         maps: offline,
         areaMapBuilder: (onArea) =>

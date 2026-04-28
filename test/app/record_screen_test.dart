@@ -8,6 +8,7 @@ import 'package:tripping/app/system_access.dart';
 import 'package:tripping/app/theme.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
+import 'package:tripping/map/offline_maps.dart';
 import 'package:tripping/recording/location_source.dart';
 import 'package:tripping/recording/recorder.dart';
 
@@ -20,6 +21,7 @@ void main() {
   late FakeSystemAccess system;
   late Recorder recorder;
   late DateTime now;
+  final savedOffline = ValueNotifier<List<OfflineMap>>(const []);
   var sunToggles = 0;
 
   setUp(() {
@@ -53,6 +55,7 @@ void main() {
           mapBuilder: (_, _) => const SizedBox.expand(),
           waypoints: store,
           historyBuilder: (_) => const Scaffold(body: Text('History here')),
+          savedOffline: savedOffline,
           offlineMapsBuilder: (_) =>
               Scaffold(appBar: AppBar(), body: const Text('Offline maps here')),
           onToggleHighSun: () => sunToggles++,
@@ -104,6 +107,41 @@ void main() {
       tester.getCenter(find.text('Pause')).dy,
       lessThan(tester.getCenter(find.text('End journey')).dy),
     );
+    await cleanUp(tester);
+  });
+
+  testWidgets('a trip inside a saved area says the map works offline', (
+    tester,
+  ) async {
+    OfflineMap around(
+      (double, double, double, double) box, {
+      bool done = true,
+    }) => OfflineMap(
+      id: 1,
+      name: 'Here',
+      area: (south: box.$1, west: box.$2, north: box.$3, east: box.$4),
+      release: 'r1',
+      savedAt: t0,
+      bytes: 1,
+      complete: done,
+      progress: done ? 1 : 0.5,
+    );
+    savedOffline.value = [around((31.9, 76.9, 32.1, 77.1))];
+    await show(tester);
+    expect(find.text('Offline map saved for this area'), findsNothing);
+
+    await tap(tester, 'Expedition');
+    await act(tester, () async => location.emit(walkFix(0)));
+    expect(find.text('Offline map saved for this area'), findsOneWidget);
+
+    savedOffline.value = [around((31.9, 76.9, 32.1, 77.1), done: false)];
+    await tester.pump();
+    expect(find.text('Offline map saved for this area'), findsNothing);
+
+    savedOffline.value = [around((40, 76.9, 41, 77.1))];
+    await tester.pump();
+    expect(find.text('Offline map saved for this area'), findsNothing);
+    savedOffline.value = const [];
     await cleanUp(tester);
   });
 

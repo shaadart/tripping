@@ -27,6 +27,45 @@ class OfflineMapsScreen extends StatefulWidget {
 class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
   late Future<List<OfflineMap>> _areas = widget.maps.list();
 
+  /// Read once per visit; null without a connection.
+  late final Future<String?> _newest = widget.maps.newestRelease();
+
+  double? _updating;
+  String? _updateError;
+  StreamSubscription<double>? _update;
+
+  @override
+  void dispose() {
+    // An update keeps going without this screen; only stop listening.
+    _update?.cancel();
+    super.dispose();
+  }
+
+  void _updateAll() {
+    setState(() {
+      _updating = 0;
+      _updateError = null;
+    });
+    _update = widget.maps.updateAll().listen(
+      (progress) => setState(() => _updating = progress),
+      onError: (Object error) => setState(() {
+        _updating = null;
+        _updateError = '$error';
+      }),
+      onDone: () {
+        if (!mounted) return;
+        final failed = _updateError != null;
+        setState(() => _updating = null);
+        _reload();
+        if (!failed) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Offline maps updated')));
+        }
+      },
+    );
+  }
+
   void _reload() {
     final next = widget.maps.list();
     setState(() {
@@ -110,6 +149,26 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
           return ListView(
             padding: const EdgeInsets.only(bottom: 96),
             children: [
+              FutureBuilder(
+                future: _newest,
+                builder: (context, snapshot) {
+                  final newest = snapshot.data;
+                  final stale = newest == null
+                      ? 0
+                      : areas
+                            .where((a) => a.release != newest || !a.complete)
+                            .length;
+                  if (stale == 0 && _updating == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return _UpdateBanner(
+                    stale: stale,
+                    progress: _updating,
+                    error: _updateError,
+                    onUpdate: _updateAll,
+                  );
+                },
+              ),
               for (final area in areas)
                 ListTile(
                   leading: Icon(
@@ -142,6 +201,67 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
   String _day(BuildContext context, DateTime? at) => at == null
       ? '—'
       : MaterialLocalizations.of(context).formatMediumDate(at.toLocal());
+}
+
+/// Offers newer map data for saved areas, all at once.
+class _UpdateBanner extends StatelessWidget {
+  const _UpdateBanner({
+    required this.stale,
+    required this.progress,
+    required this.error,
+    required this.onUpdate,
+  });
+
+  final int stale;
+  final double? progress;
+  final String? error;
+  final VoidCallback onUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final progress = this.progress;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      color: scheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Newer map data is available', style: text.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              '${stale == 1 ? 'One saved area uses' : '$stale saved areas use'} '
+              'older map data. They still work offline; update them to add '
+              'new areas. The old copies stay until the update has finished.',
+              style: text.bodyMedium,
+            ),
+            if (error case final error?)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '$error Nothing was changed.',
+                  style: text.bodyMedium?.copyWith(color: scheme.error),
+                ),
+              ),
+            const SizedBox(height: 12),
+            if (progress != null) ...[
+              LinearProgressIndicator(value: progress),
+              const SizedBox(height: 8),
+              Text('Updating… ${(progress * 100).round()} %'),
+            ] else
+              FilledButton.icon(
+                onPressed: onUpdate,
+                icon: const Icon(Icons.update),
+                label: const Text('Update all'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// "4.2 MB": one decimal is plenty for a download.

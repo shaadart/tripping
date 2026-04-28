@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tripping/map/offline_area.dart';
 
+// Around Bengaluru: 0.27° of latitude, 0.28° of longitude.
+const city = (south: 12.84, west: 77.45, north: 13.11, east: 77.73);
+
 void main() {
   test('the whole world is one tile at zoom 0, four at zoom 1', () {
     const world = (south: -85.0, west: -180.0, north: 85.0, east: 179.999);
@@ -9,8 +12,6 @@ void main() {
   });
 
   test('a city fits easily: about 230 tiles for 30 × 30 km', () {
-    // Around Bengaluru: 0.27° of latitude, 0.28° of longitude.
-    const city = (south: 12.84, west: 77.45, north: 13.11, east: 77.73);
     final tiles = tilesFor(city);
     expect(tiles, inInclusiveRange(150, 400));
     expect(fitsOneDownload(city), isTrue);
@@ -36,5 +37,12 @@ void main() {
   test('an area must fit both limits: tiles and about 50 MB', () {
     // 2,900 tiles is under the tile limit but over 50 MB by estimate.
     expect(estimatedBytes(2900), greaterThan(OfflineLimits.bytes));
+  });
+
+  test('an area covers the points inside it, edges included', () {
+    expect(covers(city, 12.97, 77.59), isTrue);
+    expect(covers(city, 12.84, 77.45), isTrue);
+    expect(covers(city, 13.2, 77.59), isFalse);
+    expect(covers(city, 12.97, 77.8), isFalse);
   });
 }
