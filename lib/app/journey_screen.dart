@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../history/journey_history.dart';
 import '../journey/journey.dart';
+import '../history/elevation_profile.dart';
+import 'elevation_chart.dart';
 import 'figure.dart';
 import '../journey/journey_store.dart';
 import '../map/track_geometry.dart';
@@ -33,6 +35,10 @@ class JourneyScreen extends StatefulWidget {
 }
 
 class _JourneyScreenState extends State<JourneyScreen> {
+  late final Future<ElevationProfile?> _elevation = widget.history.elevationOf(
+    widget.past,
+  );
+
   late final Future<(List<List<Fix>>, List<WaypointRow>)> _loaded = (
     widget.history.trackOf(widget.past.journey.id),
     widget.history.waypointsOf(widget.past.journey.id),
@@ -173,6 +179,27 @@ class _JourneyScreenState extends State<JourneyScreen> {
                             ),
                           ),
                         ),
+                      FutureBuilder(
+                        future: _elevation,
+                        builder: (context, snapshot) => switch (snapshot.data) {
+                          final profile? => Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  'Climb ${climbText(profile.climb)} · '
+                                  'Descent ${climbText(profile.descent)}',
+                                  style: text.bodyLarge,
+                                ),
+                                const SizedBox(height: 8),
+                                ElevationChart(profile: profile),
+                              ],
+                            ),
+                          ),
+                          null => const SizedBox.shrink(),
+                        },
+                      ),
                       FutureBuilder(
                         future: _loaded,
                         builder: (context, snapshot) => _Waypoints(

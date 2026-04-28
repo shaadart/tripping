@@ -53,3 +53,6 @@ String speedText(double? metersPerSecond) {
 String coordinatesText(double latitude, double longitude) =>
     '${latitude.abs().toStringAsFixed(5)}° ${latitude < 0 ? 'S' : 'N'}, '
     '${longitude.abs().toStringAsFixed(5)}° ${longitude < 0 ? 'W' : 'E'}';
+
+/// Whole metres up or down: GPS height is not finer than that.
+String climbText(double meters) => '${meters.round()} m';

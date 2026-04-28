@@ -15,10 +15,16 @@ class Progress {
     required this.closedTime,
     this.openSince,
     this.lastFix,
+    this.climb,
+    this.descent,
   });
 
   final double meters;
   final Duration movingTime;
+
+  /// Metres up and down, or null while no fix has had a usable altitude.
+  final double? climb;
+  final double? descent;
 
   /// Recording time of the segments that have closed.
   final Duration closedTime;
@@ -362,6 +368,8 @@ class Recorder {
     closedTime: _closedTime,
     openSince: _openSince,
     lastFix: _lastFix,
+    climb: _stats?.elevation.climb,
+    descent: _stats?.elevation.descent,
   );
 
   /// Wall-clock time for a lifecycle event, never earlier than the previous

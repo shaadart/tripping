@@ -552,7 +552,7 @@ class _Readout extends StatelessWidget {
       value: kilometres(progress.meters),
       label: 'Distance',
     );
-    return Row(
+    final row = Row(
       children: [
         for (final figure in switch (journey.mode) {
           JourneyMode.road => [
@@ -567,6 +567,25 @@ class _Readout extends StatelessWidget {
           ],
         })
           Expanded(child: figure),
+      ],
+    );
+    final (climb, descent) = (progress.climb, progress.descent);
+    if (journey.mode != JourneyMode.expedition ||
+        climb == null ||
+        descent == null) {
+      return row;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        row,
+        const SizedBox(height: 4),
+        Text(
+          'Climb ${climbText(climb)} · Descent ${climbText(descent)}',
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
       ],
     );
   }

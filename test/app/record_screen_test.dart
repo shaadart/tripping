@@ -255,6 +255,40 @@ void main() {
     });
   });
 
+  group('elevation (X3)', () {
+    Fix high(int second, double altitude) => Fix(
+      time: t0.add(Duration(seconds: second)),
+      latitude: walkFix(second).latitude,
+      longitude: 77,
+      accuracy: 3,
+      altitude: altitude,
+      altitudeAccuracy: 4,
+    );
+
+    testWidgets('an expedition shows climb once the GPS gives height', (
+      tester,
+    ) async {
+      await show(tester);
+      await tap(tester, 'Expedition');
+      await act(tester, () async => location.emit(walkFix(0)));
+      expect(find.textContaining('Climb'), findsNothing);
+
+      await act(tester, () async => location.emit(high(2, 2000)));
+      expect(find.text('Climb 0 m · Descent 0 m'), findsOneWidget);
+      await cleanUp(tester);
+    });
+
+    testWidgets('the road readout stays speed, distance and time', (
+      tester,
+    ) async {
+      await show(tester);
+      await tap(tester, 'Road journey');
+      await act(tester, () async => location.emit(high(0, 2000)));
+      expect(find.textContaining('Climb'), findsNothing);
+      await cleanUp(tester);
+    });
+  });
+
   group('two kinds of journey (B1)', () {
     testWidgets('the road shows the GPS speed only while it is fresh', (
       tester,

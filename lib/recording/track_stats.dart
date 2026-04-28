@@ -2,9 +2,11 @@ import 'dart:math';
 
 import '../journey/geo.dart';
 import '../journey/journey.dart';
+import 'elevation.dart';
 import 'track_policy.dart';
 
-/// Distance and moving time derived from the fixes stored for a journey.
+/// Distance, moving time and elevation derived from the fixes stored for a
+/// journey.
 ///
 /// Movement is measured from the last counted point (the anchor), not from
 /// the previous fix, and counts only once it clearly exceeds the fixes'
@@ -54,9 +56,13 @@ class TrackStats {
   double get meters => _meters;
   Duration get movingTime => _movingTime;
 
+  /// Climb and descent, counted alongside (see [ElevationCounter]).
+  final elevation = ElevationCounter();
+
   /// Call when a segment opens: nothing is known about the way between
   /// segments, so it never counts.
   void startSegment() {
+    elevation.startSegment();
     _anchor = null;
     _previous = null;
     _pace = null;
@@ -64,6 +70,7 @@ class TrackStats {
 
   /// Adds the next stored fix. Fixes must arrive in time order.
   void add(Fix fix) {
+    elevation.add(fix);
     final anchor = _anchor;
     final previous = _previous;
     _previous = fix;

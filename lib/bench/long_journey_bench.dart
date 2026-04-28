@@ -54,6 +54,8 @@ abstract final class LongJourneyBench {
               latitude: fix.latitude,
               longitude: fix.longitude,
               accuracy: Value(fix.accuracy),
+              altitude: Value(fix.altitude),
+              altitudeAccuracy: Value(fix.altitudeAccuracy),
               speed: Value(fix.speed),
               heading: Value(fix.heading),
             ),
@@ -134,8 +136,9 @@ abstract final class LongJourneyBench {
   }
 
   /// A synthetic trace from a public place (Cubbon Park): gently wandering
-  /// heading, a two-minute stop every half hour, and GPS error that drifts
-  /// like the real thing (Gauss–Markov, 30 s).
+  /// heading, a two-minute stop every half hour, a hill (walks) or rolling
+  /// ground (the drive), and GPS error that drifts like the real thing
+  /// (Gauss–Markov, 30 s).
   static List<Fix> _trace({
     required int seed,
     required DateTime start,
@@ -154,6 +157,14 @@ abstract final class LongJourneyBench {
     var longitude = 77.5929;
     var heading = random.nextDouble() * 2 * pi;
     var errorEast = sigma * gaussian(), errorNorth = sigma * gaussian();
+    // Height: a hill on each walk, rolling ground on the drive, with GPS
+    // height error that wanders like the real thing.
+    const verticalSigma = 4.0;
+    final verticalFresh = verticalSigma * sqrt(1 - keep * keep);
+    var errorUp = verticalSigma * gaussian();
+    double ground(int s) => speed < 5
+        ? 900 + 80 * (1 - (2 * s / seconds - 1).abs())
+        : 900 + 150 * sin(2 * pi * s / 7200);
     return [
       for (var s = 0; s < seconds; s++)
         () {
@@ -169,6 +180,7 @@ abstract final class LongJourneyBench {
               pi;
           errorEast = keep * errorEast + fresh * gaussian();
           errorNorth = keep * errorNorth + fresh * gaussian();
+          errorUp = keep * errorUp + verticalFresh * gaussian();
           return Fix(
             time: start.add(Duration(seconds: s)),
             latitude: latitude + errorNorth / earthRadius * 180 / pi,
@@ -176,6 +188,8 @@ abstract final class LongJourneyBench {
                 longitude +
                 errorEast / (earthRadius * cos(latitude * pi / 180)) * 180 / pi,
             accuracy: 5,
+            altitude: ground(s) + errorUp + gaussian(),
+            altitudeAccuracy: verticalSigma,
             speed: max(0, v + gaussian() * 0.1),
             heading: (heading * 180 / pi) % 360,
           );

@@ -4,6 +4,7 @@ import 'dart:math';
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../journey/simplify.dart';
+import 'elevation_profile.dart';
 import 'gpx.dart' as gpx;
 import '../recording/track_policy.dart';
 import '../recording/track_stats.dart';
@@ -70,6 +71,14 @@ class JourneyHistory {
         startedAt: past.journey.createdAt,
         track: await _store.track(past.journey.id),
         waypoints: await _store.waypointsOf(past.journey.id),
+      );
+
+  /// Climb, descent and a height profile from the full track, or null when
+  /// the phone gave no usable altitude.
+  Future<ElevationProfile?> elevationOf(PastJourney past) async =>
+      elevationProfile(
+        await _store.track(past.journey.id),
+        TrackPolicy.of(past.journey.mode),
       );
 
   /// The journey's waypoints in the order they were made.

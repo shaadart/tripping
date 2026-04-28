@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tripping/app/history_screen.dart';
 import 'package:tripping/app/theme.dart';
+import 'package:tripping/history/elevation_profile.dart';
 import 'package:tripping/history/journey_history.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
@@ -52,6 +53,22 @@ class FakeHistory implements JourneyHistory {
       longitude: 77.01,
     ),
   ];
+
+  /// A profile only for journey 1, so both cases are seen.
+  @override
+  Future<ElevationProfile?> elevationOf(PastJourney past) async =>
+      past.journey.id == 1
+      ? const ElevationProfile(
+          climb: 123,
+          descent: 45,
+          lowest: 2000,
+          highest: 2100,
+          meters: 1234,
+          lines: [
+            [(0, 2000), (600, 2100), (1234, 2060)],
+          ],
+        )
+      : null;
 
   @override
   Future<String> gpxOf(PastJourney past, {required String name}) async =>
@@ -149,6 +166,23 @@ void main() {
     expect(find.textContaining('±6 m'), findsOneWidget);
     expect(find.text('Waypoint 2'), findsOneWidget);
     expect(find.textContaining('Planned'), findsOneWidget);
+  });
+
+  testWidgets('climb, descent and the height chart, only when known', (
+    tester,
+  ) async {
+    await show(tester, FakeHistory([pastWalk(1), pastWalk(2)]));
+    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Climb 123 m · Descent 45 m'), findsOneWidget);
+    expect(find.text('2100 m'), findsOneWidget);
+    expect(find.text('2000 m'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Climb'), findsNothing);
   });
 
   testWidgets('deleting asks first, then removes the journey', (tester) async {
