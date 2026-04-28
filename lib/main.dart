@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:maplibre_gl/maplibre_gl.dart'
+    show LatLng, setHttpHeaders, setOfflineMaxConcurrentRequests;
 import 'package:path_provider/path_provider.dart';
 
 import 'app/frame_stats.dart';
 import 'app/history_screen.dart';
+import 'app/offline_maps_screen.dart';
 import 'app/record_screen.dart';
 import 'app/settings.dart';
 import 'app/share_gpx.dart';
@@ -14,7 +18,11 @@ import 'app/theme.dart';
 import 'bench/long_journey_bench.dart';
 import 'history/journey_history.dart';
 import 'journey/journey_store.dart';
+import 'map/area_map.dart';
 import 'map/journey_map.dart';
+import 'map/map_tiles.dart';
+import 'map/offline_area.dart';
+import 'map/offline_maps.dart';
 import 'map/track_map.dart';
 import 'recording/geolocator_location.dart';
 import 'recording/location_source.dart';
@@ -38,6 +46,21 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
     );
     highSun.value = settings.highSun.value;
     settings.highSun.addListener(() => highSun.value = settings.highSun.value);
+    // Maps draw a pinned tile release, so offline areas keep matching; the
+    // tile server's terms ask for a named app and at most four requests at a
+    // time (D-026).
+    final tiles = await MapTiles.open(documents, settings);
+    MapTiles.current = tiles;
+    final offline = MapLibreOfflineMaps(tiles);
+    await setHttpHeaders({'User-Agent': MapTiles.userAgent});
+    await setOfflineMaxConcurrentRequests(
+      maxRequestsPerHost: OfflineLimits.parallelRequests,
+    );
+    unawaited(
+      tiles.settle(
+        hasOfflineMaps: () async => (await offline.list()).isNotEmpty,
+      ),
+    );
     // A bench build measures on its own database, never the owner's.
     final file = File(
       '${documents.path}/'
@@ -58,6 +81,11 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
           JourneyMap(state: state, store: store, now: now),
       waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
+      offlineMapsBuilder: (_) => OfflineMapsScreen(
+        maps: offline,
+        areaMapBuilder: (onArea) =>
+            AreaMap(onArea: onArea, start: _lastKnown(recorder.state)),
+      ),
       historyBuilder: (_) {
         final history = JourneyHistory(store);
         return HistoryScreen(
@@ -76,6 +104,18 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
   } catch (error) {
     return StartupFailure(error: error);
   }
+}
+
+/// Where the phone was last known to be, to open the area picker there.
+LatLng? _lastKnown(RecorderState state) {
+  final fix = switch (state) {
+    Recording(:final latestFix?) => latestFix,
+    Recording(:final progress) ||
+    Paused(:final progress) ||
+    Interrupted(:final progress) => progress.lastFix,
+    Idle() => null,
+  };
+  return fix == null ? null : LatLng(fix.latitude, fix.longitude);
 }
 
 class TrippingApp extends StatelessWidget {

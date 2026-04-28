@@ -34,6 +34,7 @@ class RecordScreen extends StatefulWidget {
     required this.mapBuilder,
     this.waypoints,
     this.historyBuilder,
+    this.offlineMapsBuilder,
     this.onToggleHighSun,
     this.clock = _utcNow,
   });
@@ -50,6 +51,9 @@ class RecordScreen extends StatefulWidget {
 
   /// Builds the list of past journeys, opened from the idle screen.
   final WidgetBuilder? historyBuilder;
+
+  /// Builds the offline maps screen: areas kept for use without signal.
+  final WidgetBuilder? offlineMapsBuilder;
 
   /// Switches the high-contrast look for bright daylight on or off.
   final VoidCallback? onToggleHighSun;
@@ -205,6 +209,9 @@ class _RecordScreenState extends State<RecordScreen>
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _open(WidgetBuilder screen) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: screen));
+
   /// Saves where the phone is the moment the user asks, then offers to name
   /// it. Says so when the newest fix is not a live one.
   Future<void> _mark(Recording state) async {
@@ -285,6 +292,17 @@ class _RecordScreenState extends State<RecordScreen>
                           if (widget.onToggleHighSun case final toggle?) ...[
                             const SizedBox(width: 8),
                             _HighSunButton(onPressed: toggle),
+                          ],
+                          // Reachable during a trip too: an area can be
+                          // saved while there is still a signal.
+                          if (widget.offlineMapsBuilder case final offline?
+                              when state is! Idle) ...[
+                            const SizedBox(width: 8),
+                            _RoundButton(
+                              onPressed: () => _open(offline),
+                              icon: Icons.download_for_offline_outlined,
+                              tooltip: 'Offline maps',
+                            ),
                           ],
                         ],
                       ),
@@ -373,16 +391,24 @@ class _RecordScreenState extends State<RecordScreen>
           icon: const Icon(Icons.hiking),
           label: const Text('Expedition'),
         ),
-        if (widget.historyBuilder case final history?) ...[
-          const SizedBox(height: 4),
-          TextButton.icon(
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute<void>(builder: history)),
-            icon: const Icon(Icons.history),
-            label: const Text('Past journeys'),
-          ),
-        ],
+        const SizedBox(height: 4),
+        Wrap(
+          alignment: WrapAlignment.center,
+          children: [
+            if (widget.historyBuilder case final history?)
+              TextButton.icon(
+                onPressed: () => _open(history),
+                icon: const Icon(Icons.history),
+                label: const Text('Past journeys'),
+              ),
+            if (widget.offlineMapsBuilder case final offline?)
+              TextButton.icon(
+                onPressed: () => _open(offline),
+                icon: const Icon(Icons.download_for_offline_outlined),
+                label: const Text('Offline maps'),
+              ),
+          ],
+        ),
       ],
       Recording() => [
         _ActionPair(
@@ -479,6 +505,26 @@ class _ActionPair extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A small round button over the map, like the header.
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({
+    required this.onPressed,
+    required this.icon,
+    required this.tooltip,
+  });
+
+  final VoidCallback onPressed;
+  final IconData icon;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+    shape: const CircleBorder(),
+    child: IconButton(onPressed: onPressed, icon: Icon(icon), tooltip: tooltip),
+  );
 }
 
 /// Switches the high-contrast look for direct sunlight; filled while on.

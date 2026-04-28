@@ -86,6 +86,7 @@ class _JourneyMapState extends State<JourneyMap> {
   Offset? _touchStart;
   bool _blank = false;
   StreamSubscription<List<WaypointRow>>? _waypointWatch;
+  Timer? _blankTimer;
   JourneyMode _mode = JourneyMode.expedition;
 
   /// The road camera's heading, kept while the GPS heading is unreliable.
@@ -157,6 +158,12 @@ class _JourneyMapState extends State<JourneyMap> {
         ),
       );
       _styleReady = true;
+      // Checked on its own clock too: with no journey there are no updates,
+      // and a check made while the style was still loading must not stick.
+      _blankTimer ??= Timer.periodic(_blankCheckEvery, (_) {
+        final map = _map;
+        if (map != null) _serially(() => _checkBlank(map));
+      });
       // The style can reload (theme change): redraw everything.
       _journeyId = null;
       await _sync();
@@ -392,6 +399,7 @@ class _JourneyMapState extends State<JourneyMap> {
 
   @override
   void dispose() {
+    _blankTimer?.cancel();
     _waypointWatch?.cancel();
     super.dispose();
   }

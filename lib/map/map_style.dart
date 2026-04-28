@@ -3,12 +3,15 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../app/theme.dart';
 import '../journey/journey.dart';
+import 'map_tiles.dart';
 import 'track_geometry.dart';
 
 /// The bundled basemap style for the current look. Bundled, so the map and
 /// everything drawn on it work without the style server; only the tiles
 /// need the network.
-String mapStyleFor(BuildContext context) => lookOf(context).mapStyle;
+String mapStyleFor(BuildContext context) =>
+    MapTiles.current?.stylePath(lookOf(context).look) ??
+    lookOf(context).mapStyle;
 
 /// How every recorded track is drawn in the current look.
 LineLayerProperties trackLine(BuildContext context) => LineLayerProperties(

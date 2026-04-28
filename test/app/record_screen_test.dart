@@ -53,6 +53,8 @@ void main() {
           mapBuilder: (_, _) => const SizedBox.expand(),
           waypoints: store,
           historyBuilder: (_) => const Scaffold(body: Text('History here')),
+          offlineMapsBuilder: (_) =>
+              Scaffold(appBar: AppBar(), body: const Text('Offline maps here')),
           onToggleHighSun: () => sunToggles++,
           clock: () => now,
         ),
@@ -102,6 +104,22 @@ void main() {
       tester.getCenter(find.text('Pause')).dy,
       lessThan(tester.getCenter(find.text('End journey')).dy),
     );
+    await cleanUp(tester);
+  });
+
+  testWidgets('offline maps open from home, and during a trip', (tester) async {
+    await show(tester);
+    expect(find.byTooltip('Offline maps'), findsNothing);
+    await tester.tap(find.text('Offline maps'));
+    await tester.pumpAndSettle();
+    expect(find.text('Offline maps here'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tap(tester, 'Expedition');
+    await tester.tap(find.byTooltip('Offline maps'));
+    await tester.pumpAndSettle();
+    expect(find.text('Offline maps here'), findsOneWidget);
     await cleanUp(tester);
   });
 

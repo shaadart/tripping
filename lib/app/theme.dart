@@ -136,11 +136,7 @@ ThemeData trippingLook(Look look) {
     extensions: [
       TrippingLook(
         look: look,
-        mapStyle: switch (look) {
-          Look.light => 'assets/map/light.json',
-          Look.dark => 'assets/map/dark.json',
-          Look.highSun => 'assets/map/sun.json',
-        },
+        mapStyle: mapAsset(look),
         trackWidth: look == Look.highSun ? 7 : 5,
         warning: switch (look) {
           Look.light => Palette.signal,
@@ -151,6 +147,13 @@ ThemeData trippingLook(Look look) {
     ],
   );
 }
+
+/// The bundled basemap style of [look].
+String mapAsset(Look look) => switch (look) {
+  Look.light => 'assets/map/light.json',
+  Look.dark => 'assets/map/dark.json',
+  Look.highSun => 'assets/map/sun.json',
+};
 
 /// The look of the current theme.
 TrippingLook lookOf(BuildContext context) =>
