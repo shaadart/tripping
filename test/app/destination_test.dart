@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -23,9 +25,10 @@ const camp = Place(
   longitude: 77,
 );
 
-/// Answers every search with [camp]; remembers where it was asked from.
+/// Answers every search with [answer]; remembers where it was asked from.
 class NearSearch implements PlaceSearch {
   (double?, double?)? near;
+  Place answer = camp;
 
   @override
   Future<List<Place>> search(
@@ -34,13 +37,14 @@ class NearSearch implements PlaceSearch {
     double? nearLongitude,
   }) async {
     near = (nearLatitude, nearLongitude);
-    return [camp];
+    return [answer];
   }
 }
 
-/// Plans by road, or fails as the test says.
+/// Plans a road straight there, or fails as the test says.
 class StubRouter implements RouteSource {
   RouteError? failWith;
+  int asked = 0;
   double seconds = 1500;
   double meters = 6400;
 
@@ -51,6 +55,7 @@ class StubRouter implements RouteSource {
     JourneyMode mode, {
     required DateTime at,
   }) async {
+    asked++;
     if (failWith case final error?) throw error;
     return PlannedRoute(
       kind: RouteKind.road,
@@ -58,7 +63,7 @@ class StubRouter implements RouteSource {
       computedAt: at,
       meters: meters,
       seconds: seconds,
-      points: [from, (32.03, 77.01), to],
+      points: [from, to],
     );
   }
 }
@@ -121,6 +126,15 @@ void main() {
     });
   }
 
+  /// Walks [east] metres east of the start, [second]s in, at 1.5 m/s.
+  Fix eastFix(int second, double east) => Fix(
+    time: t0.add(Duration(seconds: second)),
+    latitude: 32,
+    longitude: 77 + east / (metersPerDegree * cos(32 * pi / 180)),
+    accuracy: 3,
+    speed: 1.5,
+  );
+
   /// Searches from the idle screen and picks [camp].
   Future<void> pickCamp(WidgetTester tester) async {
     await tester.tap(find.text('Search a place'));
@@ -172,7 +186,10 @@ void main() {
 
     await act(tester, () async => location.emit(walkFix(0)));
     await act(tester, () async {});
-    expect(find.text('6.40 km by road · about 25 min'), findsOneWidget);
+    expect(
+      find.textContaining('6.40 km to go by road · about 25 min, arriving'),
+      findsOneWidget,
+    );
     expect(find.text('Try again'), findsNothing);
     await cleanUp(tester);
   });
@@ -185,7 +202,10 @@ void main() {
     await act(tester, () async => tester.tap(find.text('Road journey')));
     await act(tester, () async => location.emit(walkFix(0)));
     await act(tester, () async {});
-    expect(find.text('0.01 km by road · under a minute'), findsOneWidget);
+    expect(
+      find.textContaining('0.01 km to go by road · under a minute'),
+      findsOneWidget,
+    );
     await cleanUp(tester);
   });
 
@@ -210,7 +230,84 @@ void main() {
     router.failWith = null;
     await act(tester, () async => tester.tap(find.text('Try again')));
     await act(tester, () async {});
-    expect(find.text('6.40 km by road · about 25 min'), findsOneWidget);
+    expect(
+      find.textContaining('6.40 km to go by road · about 25 min, arriving'),
+      findsOneWidget,
+    );
+    await cleanUp(tester);
+  });
+
+  testWidgets('off the road for 20 s, it says so and finds a new way', (
+    tester,
+  ) async {
+    await show(tester);
+    await pickCamp(tester);
+    await act(tester, () async => tester.tap(find.text('Road journey')));
+    await act(tester, () async => location.emit(walkFix(0)));
+    await act(tester, () async {});
+    expect(router.asked, 1);
+
+    // East, away from a road that runs north: 50 m away after 34 s.
+    for (var s = 1; s <= 50; s++) {
+      await act(tester, () async => location.emit(eastFix(s, 1.5 * s)));
+    }
+    expect(find.textContaining('Off the route'), findsNothing);
+    expect(router.asked, 1);
+    for (var s = 51; s <= 56; s++) {
+      await act(tester, () async => location.emit(eastFix(s, 1.5 * s)));
+    }
+    await act(tester, () async {});
+    expect(router.asked, 2);
+    // The new way starts here, so it is on it again.
+    expect(find.textContaining('Off the route'), findsNothing);
+    expect(find.textContaining('to go by road'), findsOneWidget);
+    await cleanUp(tester);
+  });
+
+  testWidgets('off the road without a connection, the old road stays', (
+    tester,
+  ) async {
+    await show(tester);
+    await pickCamp(tester);
+    await act(tester, () async => tester.tap(find.text('Road journey')));
+    await act(tester, () async => location.emit(walkFix(0)));
+    await act(tester, () async {});
+    router.failWith = const RouteError(
+      'Road routes need a connection.',
+      offline: true,
+    );
+    for (var s = 1; s <= 56; s++) {
+      await act(tester, () async => location.emit(eastFix(s, 1.5 * s)));
+    }
+    await act(tester, () async {});
+    expect(router.asked, 2);
+    expect(find.textContaining('Off the route · 5.'), findsOneWidget);
+    expect(find.textContaining('Road routes need a connection.'), findsOne);
+    expect(find.text('Try again'), findsOneWidget);
+    final journey = (recorder.state as Recording).journey.id;
+    final route = await tester.runAsync(() => store.routeOf(journey));
+    expect(route?.kind, RouteKind.road);
+    await cleanUp(tester);
+  });
+
+  testWidgets('near the destination it says you have arrived', (tester) async {
+    search.answer = const Place(
+      name: 'Gate',
+      latitude: 32 + 40 / metersPerDegree,
+      longitude: 77,
+    );
+    await show(tester);
+    await tester.tap(find.text('Search a place'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'gate');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gate'));
+    await tester.pumpAndSettle();
+    await act(tester, () async => tester.tap(find.text('Road journey')));
+    await act(tester, () async => location.emit(walkFix(0)));
+    await act(tester, () async {});
+    expect(find.text('You have arrived.'), findsOneWidget);
     await cleanUp(tester);
   });
 }

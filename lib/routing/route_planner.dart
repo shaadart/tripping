@@ -52,11 +52,15 @@ class RoutePlanner {
   /// the service answers, else a straight line. Returns why the way is a
   /// straight line, when it is; null when it is a road, or there is no
   /// destination.
+  ///
+  /// With [keepOnFailure] (a new way after leaving the road), a failure
+  /// keeps the way there is: an old road beats a new straight line.
   Future<RouteError?> plan(
     int journeyId,
     (double, double) from,
-    JourneyMode mode,
-  ) async {
+    JourneyMode mode, {
+    bool keepOnFailure = false,
+  }) async {
     final destination = await _store.routeOf(journeyId);
     if (destination == null) return null;
     final to = (destination.latitude, destination.longitude);
@@ -65,6 +69,7 @@ class RoutePlanner {
     try {
       route = await _router.route(from, to, mode, at: clock());
     } on RouteError catch (error) {
+      if (keepOnFailure) return error;
       why = error;
       route = PlannedRoute.straight(from, to, at: clock());
     }

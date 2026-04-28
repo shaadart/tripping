@@ -10,7 +10,9 @@ import '../map/offline_area.dart';
 import '../map/offline_maps.dart';
 import '../places/place.dart';
 import '../places/place_search.dart';
+import '../places/polyline.dart';
 import '../routing/route_planner.dart';
+import '../routing/route_progress.dart';
 import '../routing/router.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
@@ -34,6 +36,10 @@ const _speedFreshFor = Duration(seconds: 5);
 /// How long a position still counts as where the phone is, for saying how
 /// far search results are.
 const _nearFreshFor = Duration(minutes: 10);
+
+/// At most one new way a minute, after leaving the road or while a
+/// connection is missing: the routing service is shared and fair-use.
+const _replanEvery = Duration(minutes: 1);
 
 /// One journey at a time: its numbers, one main action, and plain words
 /// about anything that is wrong. The map takes the centre in M1.
@@ -103,6 +109,12 @@ class _RecordScreenState extends State<RecordScreen>
   RouteError? _routeWhy;
   bool _planning = false;
 
+  /// Progress along the way, from the newest live fix.
+  RouteFollower? _follower;
+  RouteProgress? _progress;
+  DateTime? _followedFix;
+  DateTime? _replannedAt;
+
   /// Android facts, refreshed on start and whenever the user comes back
   /// (they may have changed a setting meanwhile).
   bool? _notificationsShown;
@@ -120,6 +132,7 @@ class _RecordScreenState extends State<RecordScreen>
       setState(() => _state = state);
       _syncTicker();
       _followRoute(state);
+      _follow();
     });
     _syncTicker();
     _followRoute(_state);
@@ -260,6 +273,10 @@ class _RecordScreenState extends State<RecordScreen>
       _routeWatch = null;
       _route = null;
       _routeWhy = null;
+      _follower = null;
+      _progress = null;
+      _followedFix = null;
+      _replannedAt = null;
       if (journey != null) {
         final pending = planner.pending.value;
         if (pending != null) {
@@ -268,7 +285,13 @@ class _RecordScreenState extends State<RecordScreen>
         }
         _routeWatch = planner.watch(journey.id).listen((route) {
           if (!mounted) return;
-          setState(() => _route = route);
+          setState(() {
+            _route = route;
+            _follower = _followerFor(route);
+            _progress = null;
+            _followedFix = null;
+          });
+          _follow();
           _planIfDue();
         });
       }
@@ -276,9 +299,51 @@ class _RecordScreenState extends State<RecordScreen>
     _planIfDue();
   }
 
+  static RouteFollower? _followerFor(RouteRow? route) {
+    final kind = route?.kind;
+    final geometry = route?.geometry;
+    if (route == null || kind == null || geometry == null) return null;
+    return RouteFollower(
+      points: decodePolyline(geometry),
+      kind: kind,
+      meters: route.meters ?? 0,
+      seconds: route.seconds,
+      destination: (route.latitude, route.longitude),
+    );
+  }
+
+  /// Follows the newest live fix along the way. Off the road, or on a
+  /// straight line for want of a connection, asks for a new way now and
+  /// then.
+  void _follow() {
+    final follower = _follower;
+    final state = _state;
+    if (follower == null || state is! Recording) return;
+    final fix = state.latestFix;
+    if (fix == null || fix.time == _followedFix) return;
+    _followedFix = fix.time;
+    final progress = follower.update(fix);
+    setState(() => _progress = progress);
+    if (progress.arrived) return;
+    final why = _routeWhy;
+    final unconnected =
+        follower.kind == RouteKind.straight && (why == null || why.offline);
+    if (progress.offRoute || unconnected) _replan();
+  }
+
+  /// A new way from here, keeping the old one if none comes. [asked] by
+  /// the user goes ahead at once.
+  void _replan({bool asked = false}) {
+    final at = widget.clock();
+    final last = _replannedAt;
+    if (!asked && last != null && at.difference(last) < _replanEvery) return;
+    _replannedAt = at;
+    _planIfDue(again: true, keepOnFailure: true);
+  }
+
   /// Plans the way once there is a destination and a live fix to start
   /// from; [again] plans anew (after a straight line, say).
-  void _planIfDue({bool again = false}) {
+  void _planIfDue({bool again = false, bool keepOnFailure = false}) {
     final planner = widget.planner;
     final route = _route;
     final state = _state;
@@ -291,10 +356,12 @@ class _RecordScreenState extends State<RecordScreen>
     if (mounted) setState(() {});
     unawaited(
       planner
-          .plan(state.journey.id, (
-            fix.latitude,
-            fix.longitude,
-          ), state.journey.mode)
+          .plan(
+            state.journey.id,
+            (fix.latitude, fix.longitude),
+            state.journey.mode,
+            keepOnFailure: keepOnFailure,
+          )
           .then((why) {
             if (mounted) setState(() => _routeWhy = why);
           })
@@ -486,6 +553,8 @@ class _RecordScreenState extends State<RecordScreen>
                             route: _route,
                             why: _routeWhy,
                             planning: _planning,
+                            progress: _progress,
+                            now: now,
                             onSearch: _chooseDestination,
                             onClear: () {
                               final journey = _routeJourney;
@@ -493,7 +562,7 @@ class _RecordScreenState extends State<RecordScreen>
                                 unawaited(planner.clear(journey));
                               }
                             },
-                            onRetry: () => _planIfDue(again: true),
+                            onRetry: () => _replan(asked: true),
                           ),
                         },
                       const SizedBox(height: 12),
@@ -855,6 +924,8 @@ class _DestinationLine extends StatelessWidget {
     required this.route,
     required this.why,
     required this.planning,
+    required this.progress,
+    required this.now,
     required this.onSearch,
     required this.onClear,
     required this.onRetry,
@@ -863,6 +934,10 @@ class _DestinationLine extends StatelessWidget {
   final RouteRow? route;
   final RouteError? why;
   final bool planning;
+
+  /// How far along the way, while recording with a live fix.
+  final RouteProgress? progress;
+  final DateTime now;
   final VoidCallback onSearch;
   final VoidCallback onClear;
   final VoidCallback onRetry;
@@ -880,20 +955,36 @@ class _DestinationLine extends StatelessWidget {
         ),
       );
     }
-    final meters = route.meters;
-    final seconds = route.seconds;
-    final (subtitle, retry) = switch (route.kind) {
-      _ when planning => ('Planning the way…', false),
-      null => ('The way is planned at the first GPS fix.', false),
-      RouteKind.road => (
-        '${kilometres(meters ?? 0)} by road'
+    final progress = this.progress;
+    final meters = progress?.metersLeft ?? route.meters ?? 0;
+    final seconds = progress == null ? route.seconds : progress.secondsLeft;
+    final why = this.why;
+    final (subtitle, retry) = switch ((route.kind, progress)) {
+      (_, RouteProgress(arrived: true)) => ('You have arrived.', false),
+      (RouteKind.road, RouteProgress(offRoute: true)) => (
+        [
+          'Off the route · ${kilometres(meters)} away in a straight line.',
+          if (planning) 'Finding a new way…' else if (why != null) why.message,
+        ].join(' '),
+        !planning && why != null,
+      ),
+      _ when planning && route.kind == null => ('Planning the way…', false),
+      (null, _) => ('The way is planned at the first GPS fix.', false),
+      (RouteKind.road, null) => (
+        '${kilometres(meters)} by road'
             '${seconds == null ? '' : ' · ${_roughly(seconds)}'}',
         false,
       ),
-      RouteKind.straight => (
-        '${kilometres(meters ?? 0)} in a straight line, not by road. '
-            '${why?.message ?? 'No road route was found.'}',
-        true,
+      (RouteKind.road, _) => (
+        '${kilometres(meters)} to go by road'
+            '${seconds == null ? '' : ' · ${_roughly(seconds)}, arriving '
+                      'around ${_clock(context, seconds)}'}',
+        false,
+      ),
+      (RouteKind.straight, _) => (
+        '${kilometres(meters)} in a straight line, not by road. '
+            '${planning ? 'Looking for a road…' : why?.message ?? 'No road route was found.'}',
+        !planning,
       ),
     };
     return Padding(
@@ -907,6 +998,14 @@ class _DestinationLine extends StatelessWidget {
       ),
     );
   }
+
+  /// The time of day [seconds] from [now]: an estimate, said as one.
+  String _clock(BuildContext context, double seconds) =>
+      MaterialLocalizations.of(context).formatTimeOfDay(
+        TimeOfDay.fromDateTime(
+          now.add(Duration(seconds: seconds.round())).toLocal(),
+        ),
+      );
 
   /// "about 25 min", "about 2 h 10 min": a service's estimate, not a
   /// promise.

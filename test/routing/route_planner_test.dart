@@ -96,6 +96,30 @@ void main() {
     },
   );
 
+  test(
+    'a new way that fails keeps the old road, not a straight line',
+    () async {
+      router.answer = () async => road();
+      await planner.goTo(journey, park);
+      await planner.plan(journey, here, JourneyMode.road);
+
+      router.answer = () async => throw const RouteError(
+        'No road route without a connection.',
+        offline: true,
+      );
+      final why = await planner.plan(
+        journey,
+        (12.99, 77.6),
+        JourneyMode.road,
+        keepOnFailure: true,
+      );
+      expect(why?.offline, isTrue);
+      final route = (await store.routeOf(journey))!;
+      expect(route.kind, RouteKind.road);
+      expect(decodePolyline(route.geometry!), road().points);
+    },
+  );
+
   test('a route for a destination changed meanwhile is not kept', () async {
     final answer = Completer<PlannedRoute>();
     router.answer = () => answer.future;
