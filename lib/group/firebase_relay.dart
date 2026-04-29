@@ -56,6 +56,22 @@ class FirebaseRelay implements Relay {
     }
     return _FirebaseRoom(db, ref, uid);
   }
+
+  @override
+  Future<void> leaveRoom(String room) async =>
+      _leave(FirebaseDatabase.instance.ref('rooms/$room'), await me());
+}
+
+/// Own entries out, then the room itself if no one is left; the rules
+/// refuse that last step while anyone remains.
+Future<void> _leave(DatabaseReference room, String uid) async {
+  await room.child('presence/$uid').remove();
+  await room.child('members/$uid').remove();
+  try {
+    await room.child('meta').remove();
+  } on FirebaseException {
+    // Others are still in it.
+  }
 }
 
 class _FirebaseRoom implements RelayRoom {
@@ -148,9 +164,12 @@ class _FirebaseRoom implements RelayRoom {
   }
 
   @override
-  Future<void> leave() async {
-    await _ref.child('presence/$_uid').remove();
-    await _ref.child('members/$_uid').remove();
+  Future<void> leave() => _leave(_ref, _uid);
+
+  @override
+  Future<void> forget(String participant) async {
+    await _ref.child('presence/$participant').remove();
+    await _ref.child('members/$participant').remove();
   }
 
   @override

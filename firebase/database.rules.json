@@ -13,7 +13,7 @@
       "$room": {
         "meta": {
           ".read": "auth != null && root.child('rooms').child($room).child('members').child(auth.uid).exists()",
-          ".write": "auth != null && newData.exists() && ((!data.exists() && newData.child('by').val() === auth.uid && newData.child('created').val() === now && !newData.hasChild('closed')) || (data.exists() && !data.hasChild('closed') && data.child('by').val() === auth.uid && newData.child('by').val() === data.child('by').val() && newData.child('created').val() === data.child('created').val() && newData.child('closed').val() === now))",
+          ".write": "auth != null && ((newData.exists() && ((!data.exists() && newData.child('by').val() === auth.uid && newData.child('created').val() === now && !newData.hasChild('closed')) || (data.exists() && !data.hasChild('closed') && data.child('by').val() === auth.uid && newData.child('by').val() === data.child('by').val() && newData.child('created').val() === data.child('created').val() && newData.child('closed').val() === now))) || (!newData.exists() && !root.child('rooms').child($room).child('members').exists()))",
           ".validate": "newData.hasChildren(['created', 'by'])",
           "created": {
             ".validate": true
@@ -31,7 +31,7 @@
         "members": {
           ".read": "auth != null && data.child(auth.uid).exists()",
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (root.child('rooms').child($room).child('meta').exists() && !root.child('rooms').child($room).child('meta').hasChild('closed')))",
+            ".write": "auth != null && ((auth.uid === $uid && (!newData.exists() || (root.child('rooms').child($room).child('meta').exists() && !root.child('rooms').child($room).child('meta').hasChild('closed')))) || (!newData.exists() && root.child('rooms').child($room).child('members').child(auth.uid).exists() && now - data.child('joined').val() > 86400000 && (!root.child('rooms').child($room).child('presence').child($uid).exists() || now - root.child('rooms').child($room).child('presence').child($uid).child('at').val() > 86400000)))",
             ".validate": "newData.hasChildren(['joined']) && newData.child('joined').val() === now",
             "joined": {
               ".validate": true
@@ -44,7 +44,7 @@
         "presence": {
           ".read": "auth != null && root.child('rooms').child($room).child('members').child(auth.uid).exists()",
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (root.child('rooms').child($room).child('members').child(auth.uid).exists() && !root.child('rooms').child($room).child('meta').hasChild('closed') && (!data.exists() || now - data.child('at').val() >= 2000)))",
+            ".write": "auth != null && ((auth.uid === $uid && (!newData.exists() || (root.child('rooms').child($room).child('members').child(auth.uid).exists() && !root.child('rooms').child($room).child('meta').hasChild('closed') && (!data.exists() || now - data.child('at').val() >= 2000)))) || (!newData.exists() && root.child('rooms').child($room).child('members').child(auth.uid).exists() && now - data.child('at').val() > 86400000))",
             ".validate": "newData.hasChildren(['seq', 'at', 'box']) && newData.child('seq').isNumber() && newData.child('at').val() === now && newData.child('box').isString() && newData.child('box').val().length <= 1024",
             "seq": {
               ".validate": true

@@ -28,8 +28,10 @@ import 'recording/geolocator_location.dart';
 import 'recording/location_source.dart';
 import 'places/place_search.dart';
 import 'group/firebase_relay.dart';
+import 'group/group_housekeeping.dart';
 import 'group/group_sync.dart';
 import 'recording/raw_fix_log.dart';
+import 'recording/simulated_location.dart';
 import 'relay/relay_spike.dart';
 import 'recording/recorder.dart';
 import 'routing/route_planner.dart';
@@ -84,7 +86,11 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
     );
     final store = JourneyStore.file(file);
     if (LongJourneyBench.enabled) await LongJourneyBench.run(store, file);
-    LocationSource location = const GeolocatorLocation();
+    // A simulated test build makes up its positions and never reads the
+    // phone's (E-037); every other build reads the GPS.
+    LocationSource location = SimulatedLocation.enabled
+        ? SimulatedLocation.fromSpec(SimulatedLocation.spec)
+        : const GeolocatorLocation();
     if (kDebugMode) {
       location = RawFixLog(location, File('${documents.path}/raw_fixes.jsonl'));
     }
@@ -92,7 +98,17 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
     // Open-source search and routing over OpenStreetMap (D-026).
     final planner = RoutePlanner(store, ValhallaRouter());
     // Positions shared with the journey's group (G2, G3; D-034, D-037).
-    final group = GroupSync(FirebaseRelay());
+    final relay = FirebaseRelay();
+    final group = GroupSync(relay);
+    // Groups of journeys ended over a day ago: take this phone's part out
+    // (G7). Never in the way of starting.
+    unawaited(
+      tidyGroups(
+        store,
+        relay,
+        now: DateTime.now().toUtc(),
+      ).catchError((Object _) => 0),
+    );
     return RecordScreen(
       recorder: recorder,
       location: location,

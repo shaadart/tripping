@@ -457,6 +457,21 @@ class JourneyStore extends _$JourneyStore {
     );
   });
 
+  /// Memberships of journeys that ended before [cutoff]: groups this phone
+  /// should take its entries out of (G7).
+  Future<List<MembershipRow>> membershipsEndedBefore(DateTime cutoff) {
+    final query =
+        select(memberships).join([
+          innerJoin(journeys, journeys.id.equalsExp(memberships.journeyId)),
+        ])..where(
+          journeys.status.equalsValue(JourneyStatus.ended) &
+              journeys.endedAt.isSmallerThanValue(
+                cutoff.toUtc().millisecondsSinceEpoch,
+              ),
+        );
+    return query.map((row) => row.readTable(memberships)).get();
+  }
+
   /// Takes [journeyId] out of its group, on this phone.
   Future<void> deleteMembership(int journeyId) =>
       (delete(memberships)..where((m) => m.journeyId.equals(journeyId))).go();

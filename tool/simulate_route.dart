@@ -1,3 +1,9 @@
+// NOT FOR TESTING THE APP (E-037): on a Pixel, Google's fused provider can
+// still place the phone from Wi-Fi past these test providers, and twice
+// let the owner's real position into a test. Build test apps with
+// --dart-define=TRIPPING_SIMULATE=lat,lon,speed instead (SimulatedLocation),
+// which never reads the phone's position, and keep Location off.
+//
 // Feeds a simulated walk or drive into a phone's GPS over adb, through
 // Android's test location provider, so recording and the map can be tested at
 // a desk. By default the route loops around Cubbon Park, Bengaluru (a public

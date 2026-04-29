@@ -100,11 +100,7 @@ Future<void> main(List<String> args) async {
         continue;
       }
       final fix = shared.fix;
-      final lake = Fix(
-        time: DateTime.now(),
-        latitude: atLat,
-        longitude: atLon,
-      );
+      final lake = Fix(time: DateTime.now(), latitude: atLat, longitude: atLon);
       log(
         'heard ${shared.name} seq=${value['seq']} ${shared.phase.name} '
         '${shared.mode.name} '

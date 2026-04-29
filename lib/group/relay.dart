@@ -39,6 +39,10 @@ abstract interface class Relay {
   /// Opens [room]. The inviter [create]s it; others may only join a room
   /// that exists.
   Future<RelayRoom> open(String room, {required bool create});
+
+  /// Takes this install's entries out of [room] without following it, and
+  /// removes the room if no one is left (G7).
+  Future<void> leaveRoom(String room);
 }
 
 abstract interface class RelayRoom {
@@ -60,8 +64,12 @@ abstract interface class RelayRoom {
   /// inviter could end it).
   Stream<bool> get ended;
 
-  /// Takes this member out of the group: its entries go, the group stays.
+  /// Takes this member out of the group: its entries go, the group stays;
+  /// the last one out also removes the room.
   Future<void> leave();
+
+  /// Removes [participant]'s entries, silent for over a day (G7).
+  Future<void> forget(String participant);
 
   /// Stops listening; the membership stays.
   Future<void> close();

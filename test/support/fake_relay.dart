@@ -56,6 +56,19 @@ class FakeRelay implements Relay, RelayRoom {
   @override
   Future<void> leave() async => left++;
 
+  final forgotten = <String>[];
+  final roomsLeft = <String>[];
+  var failLeavingRooms = false;
+
+  @override
+  Future<void> forget(String participant) async => forgotten.add(participant);
+
+  @override
+  Future<void> leaveRoom(String room) async {
+    if (failLeavingRooms) throw StateError('offline');
+    roomsLeft.add(room);
+  }
+
   @override
   Future<void> close() async => closed++;
 

@@ -216,6 +216,51 @@ Future<void> main() async {
   );
   await expect('and can still leave', 'DELETE', '$e/members/$b', bToken, 200);
 
+  // Retention (G7): only day-old entries of others may be removed, and the
+  // room only once no one is left.
+  final t = '${r}t';
+  await expect('a third room', 'PUT', '$t/meta', aToken, 200, {
+    'created': FirebaseRest.now,
+    'by': a,
+  });
+  for (final (uid, token) in [(a, aToken), (b, bToken)]) {
+    await fb.call('PUT', fb.at('$t/members/$uid', token), {
+      'joined': FirebaseRest.now,
+    });
+  }
+  await fb.call('PUT', fb.at('$t/presence/$a', aToken), presence);
+  await expect(
+    "remove someone's fresh position",
+    'DELETE',
+    '$t/presence/$a',
+    bToken,
+    401,
+  );
+  await expect(
+    "remove someone's fresh membership",
+    'DELETE',
+    '$t/members/$a',
+    bToken,
+    401,
+  );
+  await expect(
+    'remove the room while members remain',
+    'DELETE',
+    '$t/meta',
+    aToken,
+    401,
+  );
+  await fb.call('DELETE', fb.at('$t/presence/$a', aToken));
+  await fb.call('DELETE', fb.at('$t/members/$a', aToken));
+  await fb.call('DELETE', fb.at('$t/members/$b', bToken));
+  await expect(
+    'the last one out removes the room',
+    'DELETE',
+    '$t/meta',
+    bToken,
+    200,
+  );
+
   stdout.writeln(failures == 0 ? 'ALL PASS' : '$failures FAILED');
   fb.client.close(force: true);
   exit(failures == 0 ? 0 : 1);

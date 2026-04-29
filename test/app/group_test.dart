@@ -276,7 +276,7 @@ void main() {
     tester,
   ) async {
     final relay = FakeRelay()..reachable = true;
-    group = GroupSync(relay);
+    group = GroupSync(relay, clock: () => t0);
     await tester.runAsync(() => settings.setName('Ravi'));
     await show(tester);
     await act(tester, () async => tester.tap(find.text('Expedition')));

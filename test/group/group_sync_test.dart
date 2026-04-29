@@ -320,6 +320,60 @@ void main() {
     });
   });
 
+  test('a companion standing still for over 2 minutes is "stopped"', () async {
+    final keys = await GroupKeys.derive(secret);
+    final sync = GroupSync(relay);
+    await sync.follow(membership(secret));
+    for (final minute in [0, 1, 2, 3]) {
+      final at = t0.add(Duration(minutes: minute));
+      final said = Shared(
+        name: 'Asha',
+        phase: JourneyPhase.recording,
+        mode: JourneyMode.road,
+        fix: Fix(time: at, latitude: 11.4, longitude: 76.7 + minute * 1e-5),
+      );
+      relay.changes.add([
+        RelayEntry(
+          participant: 'a',
+          seq: minute + 1,
+          at: at,
+          box: await keys.seal(said.toMessage(at: at), 'a'),
+        ),
+      ]);
+      await pumpEventQueue();
+    }
+    expect(
+      sync.status.value!.companions.single.stillSince,
+      t0.subtract(relay.offset),
+    );
+    await sync.stop();
+  });
+
+  test('a member silent for over a day is forgotten, once', () async {
+    final keys = await GroupKeys.derive(secret);
+    final sync = GroupSync(relay, clock: () => t0);
+    await sync.follow(membership(secret));
+    final said = Shared(
+      name: 'Asha',
+      phase: JourneyPhase.ended,
+      mode: JourneyMode.road,
+      fix: fixAt(0, 0),
+    );
+    final old = RelayEntry(
+      participant: 'a',
+      seq: 9,
+      at: t0.subtract(const Duration(hours: 25)),
+      box: await keys.seal(said.toMessage(), 'a'),
+    );
+    relay.changes.add([old]);
+    await pumpEventQueue();
+    relay.changes.add([old]);
+    await pumpEventQueue();
+    expect(relay.forgotten, ['a']);
+    expect(sync.status.value!.companions, isEmpty);
+    await sync.stop();
+  });
+
   test('refused again and again while reachable: says so', () {
     onFakeClock((async, sync) {
       relay

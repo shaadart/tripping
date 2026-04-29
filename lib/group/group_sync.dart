@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
+import 'convoy.dart';
 import 'group_keys.dart';
 import 'relay.dart';
 import 'sharing.dart';
@@ -14,6 +15,7 @@ class Companion {
     required this.participant,
     required this.heardAt,
     required this.shared,
+    this.stillSince,
   });
 
   final String participant;
@@ -25,6 +27,10 @@ class Companion {
   final Shared shared;
 
   String get name => shared.name;
+
+  /// Since when they have stood still while recording, once that is longer
+  /// than two minutes (G6).
+  final DateTime? stillSince;
 
   /// When their position was taken, on this phone's clock: the relay's
   /// receipt less its age when sent, so neither phone's clock error
@@ -105,6 +111,13 @@ class GroupSync {
   Shared? _told;
   var _refusals = 0;
 
+  /// After this long without a word, a member's entries go (G7).
+  static const expireAfter = Duration(hours: 24);
+  final _forgotten = <String>{};
+
+  /// Who has stood still where, per companion.
+  final _still = <String, Stillness>{};
+
   /// Each companion's newest genuine entry.
   final _heard = <String, ({int seq, DateTime at, Companion companion})>{};
 
@@ -169,8 +182,19 @@ class GroupSync {
         )
         ..add(
           room.entries.listen((entries) async {
+            final silentSince = _clock().subtract(expireAfter);
             for (final entry in entries) {
               if (entry.participant == me) continue;
+              // Silent for over a day: gone from the group (G7). Its
+              // entries are removed for everyone, once.
+              if (entry.at.subtract(room.clockOffset).isBefore(silentSince)) {
+                if (_forgotten.add(entry.participant)) {
+                  unawaited(
+                    room.forget(entry.participant).catchError((Object _) {}),
+                  );
+                }
+                continue;
+              }
               // Duplicates and anything older than what is shown change
               // nothing (invariant 9).
               final known = _heard[entry.participant];
@@ -186,17 +210,38 @@ class GroupSync {
                   : Shared.fromMessage(message);
               // A damaged entry leaves the last good one in place.
               if (shared == null) continue;
+              final heard = Companion(
+                participant: entry.participant,
+                heardAt: entry.at.subtract(room.clockOffset),
+                shared: shared,
+              );
+              final still = _still.putIfAbsent(
+                entry.participant,
+                Stillness.new,
+              );
+              final fix = shared.fix;
+              final positionAt = heard.positionAt;
+              final stillSince =
+                  fix != null &&
+                      positionAt != null &&
+                      shared.phase == JourneyPhase.recording
+                  ? still.update(fix, positionAt)
+                  : null;
               _heard[entry.participant] = (
                 seq: entry.seq,
                 at: entry.at,
                 companion: Companion(
                   participant: entry.participant,
-                  heardAt: entry.at.subtract(room.clockOffset),
+                  heardAt: heard.heardAt,
                   shared: shared,
+                  stillSince: stillSince,
                 ),
               );
             }
-            final present = {for (final e in entries) e.participant};
+            final present = {
+              for (final e in entries)
+                if (!_forgotten.contains(e.participant)) e.participant,
+            };
             _heard.removeWhere(
               (participant, _) => !present.contains(participant),
             );
@@ -323,6 +368,8 @@ class GroupSync {
     _toldAt = null;
     _refusals = 0;
     _heard.clear();
+    _still.clear();
+    _forgotten.clear();
     _connected = false;
     _ended = false;
     status.value = null;

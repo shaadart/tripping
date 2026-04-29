@@ -53,4 +53,22 @@ void main() {
     await store.deleteJourney(journey);
     expect(await store.membershipOf(journey), isNull);
   });
+
+  test('groups of journeys ended before a time, and only those', () async {
+    await join(journey);
+    await store.end(journey, at: t0.add(const Duration(hours: 1)));
+    final recent = (await store.startJourney(
+      JourneyMode.road,
+      at: t0.add(const Duration(hours: 30)),
+    )).id;
+    await join(recent, group: 'g-2');
+    final cutoff = t0.add(const Duration(hours: 26));
+    expect(
+      [for (final m in await store.membershipsEndedBefore(cutoff)) m.groupId],
+      ['g-1'],
+      reason: 'the active journey is not ended',
+    );
+    await store.end(recent, at: t0.add(const Duration(hours: 31)));
+    expect(await store.membershipsEndedBefore(cutoff), hasLength(1));
+  });
 }

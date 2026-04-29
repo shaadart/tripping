@@ -19,6 +19,7 @@ import '../recording/course.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
+import '../group/convoy.dart';
 import '../group/group_sync.dart';
 import '../group/invite.dart';
 import '../group/sharing.dart';
@@ -480,6 +481,29 @@ class _RecordScreenState extends State<RecordScreen>
     );
   }
 
+  /// On a road journey following a road route, measures companions along
+  /// it (G6); kept while the route is the same.
+  Convoy? _convoy;
+  String? _convoyGeometry;
+
+  Convoy? _convoyFor(RecorderState state, RouteRow? route) {
+    final road = switch (state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey.mode == JourneyMode.road,
+      Idle() => false,
+    };
+    final geometry = route?.geometry;
+    if (!road || route?.kind != RouteKind.road || geometry == null) {
+      return null;
+    }
+    if (geometry != _convoyGeometry) {
+      _convoyGeometry = geometry;
+      _convoy = Convoy(decodePolyline(geometry));
+    }
+    return _convoy;
+  }
+
   /// Leaves the group, inviter or not: this phone stops sharing, the group
   /// and the journey go on (D-037).
   Future<void> _leaveGroup() async {
@@ -861,6 +885,7 @@ class _RecordScreenState extends State<RecordScreen>
                             Idle() => null,
                           },
                           onLeave: _leaveGroup,
+                          convoy: _convoyFor(state, _route),
                           onInvite: _invite,
                           onJoin: _join,
                         ),
@@ -1372,9 +1397,13 @@ class _GroupLine extends StatelessWidget {
     required this.onInvite,
     required this.onJoin,
     required this.onLeave,
+    required this.convoy,
   });
 
   final MembershipRow? membership;
+
+  /// Measures companions along this phone's road route, if any.
+  final Convoy? convoy;
   final ValueListenable<GroupStatus?>? status;
   final DateTime now;
 
@@ -1426,7 +1455,7 @@ class _GroupLine extends StatelessWidget {
             'Connected · sharing your position with the group',
         }, style: muted),
         if (status != null && !status.ended) ...[
-          for (final companion in status.companions)
+          for (final companion in _inConvoyOrder(status.companions))
             _companion(companion, text, muted),
           if (status.connected && status.heard && status.companions.isEmpty)
             Text('No one else has joined yet', style: muted),
@@ -1480,12 +1509,16 @@ class _GroupLine extends StatelessWidget {
       );
     }
     final old = _atLeastZero(now.difference(companion.positionAt ?? fix.time));
+    final still = companion.stillSince;
     final freshness = freshnessOf(old, shared.mode);
     return Text(
       [
         shared.name,
-        if (here != null) distanceAndDirection(here, fix),
+        if (here != null)
+          convoy?.gapText(here, fix) ?? distanceAndDirection(here, fix),
         if (shared.phase == JourneyPhase.paused) 'paused',
+        if (still != null)
+          'stopped ${age(_atLeastZero(now.difference(still)))}',
         switch (freshness) {
           Freshness.stale => 'last seen ${age(old)} ago',
           _ => '${age(old)} ago',
@@ -1493,6 +1526,19 @@ class _GroupLine extends StatelessWidget {
       ].join(' · '),
       style: freshness == Freshness.live ? text.bodyMedium : muted,
     );
+  }
+
+  /// Along a road route, the leader first; otherwise newest heard first.
+  List<Companion> _inConvoyOrder(List<Companion> companions) {
+    final convoy = this.convoy;
+    if (convoy == null) return companions;
+    double rank(Companion c) {
+      final fix = c.shared.fix;
+      return (fix == null ? null : convoy.alongOf(fix)) ??
+          double.negativeInfinity;
+    }
+
+    return [...companions]..sort((a, b) => rank(b).compareTo(rank(a)));
   }
 
   /// Clocks disagree by a little; an age is never negative.
