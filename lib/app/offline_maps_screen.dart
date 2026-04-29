@@ -155,9 +155,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                   final newest = snapshot.data;
                   final stale = newest == null
                       ? 0
-                      : areas
-                            .where((a) => a.release != newest || !a.complete)
-                            .length;
+                      : areas.where((a) => !a.isCurrent(newest)).length;
                   if (stale == 0 && _updating == null) {
                     return const SizedBox.shrink();
                   }
@@ -371,7 +369,8 @@ class _AreaPickerState extends State<_AreaPicker> {
                       null => 'Move the map to the area of your trip.',
                       _ when fits =>
                         'About $tiles map tiles · roughly '
-                            '${megabytes(estimatedBytes(tiles))}',
+                            '${megabytes(estimatedAreaBytes(area))} with '
+                            'hill shading',
                       _ =>
                         'Too big for one download: about $tiles map tiles, roughly '
                             '${megabytes(estimatedBytes(tiles))} (the limit is '

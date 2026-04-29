@@ -25,9 +25,6 @@ class MapTiles {
 
   static const index = 'https://tiles.openfreemap.org/planet';
 
-  /// OpenFreeMap's hosted Positron, which offline downloads are made from.
-  static const downloadStyle = 'https://tiles.openfreemap.org/styles/positron';
-
   /// Identifies the app to the tile server, as its terms ask.
   static const userAgent = 'Tripping/1.0 (Android; com.example.tripping)';
 

@@ -6,9 +6,13 @@
 // - dark: greys warmed towards the app's night, water kept visibly blue
 // - sun: from Positron, darker roads and near-black labels for glare
 //
+// Each also gets hill shading (O3, D-030) from the open terrain tiles on AWS
+// Open Data, under roads and labels.
+//
 //   dart run tool/map_styles.dart
 //
-// Only colours change; layers, sources and attribution stay as upstream.
+// Apart from the hill shading, only colours change; layers, sources and
+// attribution stay as upstream.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -16,9 +20,85 @@ import 'dart:math';
 void main() {
   final positron = _read('positron');
   final dark = _read('dark');
-  _write('light', _transform(positron, _light));
-  _write('dark', _transform(dark, _night));
-  _write('sun', _transform(positron, _sun));
+  _write(
+    'light',
+    _withTerrain(
+      _transform(positron, _light),
+      shadow: '#6B5A48',
+      highlight: '#FFFDF8',
+      accent: '#8A7660',
+      exaggeration: 0.35,
+    ),
+  );
+  _write(
+    'dark',
+    _withTerrain(
+      _transform(dark, _night),
+      // Shadow barely shows on a near-black map; light slopes carry it.
+      shadow: '#000000',
+      highlight: '#7A6A5C',
+      accent: '#000000',
+      exaggeration: 0.5,
+    ),
+  );
+  _write(
+    'sun',
+    _withTerrain(
+      _transform(positron, _sun),
+      shadow: '#7A6A58',
+      highlight: '#FFFFFF',
+      accent: '#8A7660',
+      exaggeration: 0.25,
+    ),
+  );
+}
+
+/// Where the terrain tiles are: Terrarium-encoded elevation, 256 px, on AWS
+/// Open Data (no account, no key). The app's offline downloads use the same
+/// address, so a saved area's terrain is found by it.
+const terrainTiles =
+    'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+
+/// Adds the terrain source and a hill-shading layer just above land cover
+/// and water, below buildings and the first label, so roads, buildings and
+/// every label draw over it.
+Map<String, Object?> _withTerrain(
+  Map<String, Object?> style, {
+  required String shadow,
+  required String highlight,
+  required String accent,
+  required double exaggeration,
+}) {
+  (style['sources']! as Map<String, Object?>)['terrain'] = {
+    'type': 'raster-dem',
+    'tiles': [terrainTiles],
+    'encoding': 'terrarium',
+    'tileSize': 256,
+    // Closer views draw zoom 12 larger: about 38 m a pixel, near the
+    // resolution of the underlying data (SRTM, 30 m) in most places.
+    'minzoom': 3,
+    'maxzoom': 12,
+    'attribution':
+        'Terrain: <a href="https://github.com/tilezen/joerd/blob/master/docs/'
+        'attribution.md" target="_blank">Mapzen, USGS (SRTM, GMTED2010, 3DEP), '
+        'NOAA (ETOPO1)</a>',
+  };
+  final layers = (style['layers']! as List).cast<Map<String, Object?>>();
+  final below = layers.indexWhere(
+    (l) => l['id'] == 'building' || l['type'] == 'symbol',
+  );
+  layers.insert(below < 0 ? 1 : below, {
+    'id': 'hillshade',
+    'type': 'hillshade',
+    'source': 'terrain',
+    'paint': {
+      'hillshade-shadow-color': shadow,
+      'hillshade-highlight-color': highlight,
+      'hillshade-accent-color': accent,
+      'hillshade-exaggeration': exaggeration,
+    },
+  });
+  return style;
 }
 
 typedef _Rule = _Colour Function(String layer, String property, _Colour c);

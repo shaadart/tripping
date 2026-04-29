@@ -49,7 +49,7 @@ class FakeOfflineMaps implements OfflineMaps {
 const city = (south: 12.84, west: 77.45, north: 13.11, east: 77.73);
 const state = (south: 11.5, west: 74.0, north: 18.5, east: 78.6);
 
-OfflineMap saved(int id, String name) => OfflineMap(
+OfflineMap saved(int id, String name, {bool terrain = true}) => OfflineMap(
   id: id,
   name: name,
   area: city,
@@ -58,6 +58,7 @@ OfflineMap saved(int id, String name) => OfflineMap(
   bytes: 4404019,
   complete: true,
   progress: 1,
+  terrain: terrain,
 );
 
 /// The download button: `FilledButton.icon` builds a subclass, which an
@@ -122,7 +123,10 @@ void main() {
     await show(tester, maps);
     await tester.tap(find.text('Download an area'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('map tiles · roughly'), findsOneWidget);
+    expect(
+      find.textContaining(RegExp(r'map tiles · roughly .* with hill shading')),
+      findsOneWidget,
+    );
 
     await tester.enterText(find.byType(TextField), 'Bengaluru');
     await tester.tap(downloadButton());
@@ -185,6 +189,16 @@ void main() {
       expect(find.textContaining('One saved area uses'), findsOneWidget);
     });
 
+    testWidgets('an area saved before hill shading counts as older', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        FakeOfflineMaps([saved(1, 'Spiti valley', terrain: false)], 'r1'),
+      );
+      expect(find.text('Newer map data is available'), findsOneWidget);
+    });
+
     testWidgets('updates all, with progress', (tester) async {
       final maps = FakeOfflineMaps([saved(1, 'Spiti valley')], 'r2');
       await show(tester, maps);
@@ -206,6 +220,7 @@ void main() {
             bytes: 5000000,
             complete: true,
             progress: 1,
+            terrain: true,
           ),
         );
       maps.updating!.add(1);

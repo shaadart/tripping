@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
 
+import '../app/theme.dart';
+import 'download_style.dart';
 import 'map_tiles.dart';
 import 'offline_area.dart';
 
@@ -17,6 +20,7 @@ class OfflineMap {
     required this.bytes,
     required this.complete,
     required this.progress,
+    this.terrain = false,
   });
 
   final int id;
@@ -31,6 +35,13 @@ class OfflineMap {
 
   /// 0 to 1 while incomplete.
   final double progress;
+
+  /// Whether it holds terrain for hill shading (areas saved before O3 do
+  /// not).
+  final bool terrain;
+
+  /// Complete, with terrain, from the [newest] map data: nothing to update.
+  bool isCurrent(String newest) => release == newest && complete && terrain;
 }
 
 /// Why a download did not go ahead.
@@ -111,6 +122,7 @@ class MapLibreOfflineMaps implements OfflineMaps {
       },
       bytes: status.completedResourceSize,
       complete: status.isComplete,
+      terrain: metadata['terrain'] == true,
       // Reported as a percentage.
       progress: (status.downloadProgress / 100).clamp(0, 1).toDouble(),
     );
@@ -149,7 +161,7 @@ class MapLibreOfflineMaps implements OfflineMaps {
     final newest = await _newest();
     final old = [
       for (final saved in await list())
-        if (saved.release != newest || !saved.complete) saved,
+        if (!saved.isCurrent(newest)) saved,
     ];
     final made = <int>[];
     try {
@@ -221,7 +233,23 @@ class MapLibreOfflineMaps implements OfflineMaps {
     Area area,
     String release,
     void Function(double) onProgress,
+  ) async => withLocalStyle(
+    // The light look's style: OpenFreeMap's index, fonts and sprites, as
+    // every look uses, and the terrain source.
+    await rootBundle.loadString(mapAsset(Look.light)),
+    (style) => _fetchWith(style, name, area, release, onProgress),
+  );
+
+  Future<int> _fetchWith(
+    String style,
+    String name,
+    Area area,
+    String release,
+    void Function(double) onProgress,
   ) async {
+    // OpenFreeMap's 50 MB is for its own data; terrain comes on top.
+    final allowed =
+        OfflineLimits.bytes + 2 * estimatedTerrainBytes(terrainTilesFor(area));
     final done = Completer<void>();
     void fail(String message) {
       if (!done.isCompleted) done.completeError(OfflineMapError(message));
@@ -242,11 +270,11 @@ class MapLibreOfflineMaps implements OfflineMaps {
           southwest: maplibre.LatLng(area.south, area.west),
           northeast: maplibre.LatLng(area.north, area.east),
         ),
-        // OpenFreeMap's own Positron: MapLibre's downloader fetches the
-        // style over the network (it could not read our style files). It
-        // has every font the looks use, and all share tiles and sprites, so
+        // Served locally (MapLibre's downloader cannot read a file). Its
+        // tiles follow OpenFreeMap's index, so they are the newest
+        // release's; all looks share tiles, fonts, sprites and terrain, so
         // one download serves every look.
-        mapStyleUrl: MapTiles.downloadStyle,
+        mapStyleUrl: style,
         minZoom: 0,
         maxZoom: OfflineLimits.maxZoom.toDouble(),
       ),
@@ -254,6 +282,7 @@ class MapLibreOfflineMaps implements OfflineMaps {
         'name': name,
         'release': release,
         'savedAt': DateTime.now().toUtc().toIso8601String(),
+        'terrain': true,
       },
       onEvent: (event) {
         stalled.cancel();
@@ -262,7 +291,7 @@ class MapLibreOfflineMaps implements OfflineMaps {
             :final progress,
             :final completedResourceSize,
           ):
-            if (completedResourceSize > OfflineLimits.bytes) {
+            if (completedResourceSize > allowed) {
               fail('This area is larger than 50 MB; choose a smaller one.');
             } else {
               // Reported as a percentage.

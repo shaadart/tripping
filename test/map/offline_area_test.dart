@@ -45,4 +45,14 @@ void main() {
     expect(covers(city, 13.2, 77.59), isFalse);
     expect(covers(city, 12.97, 77.8), isFalse);
   });
+
+  test('terrain comes from zoom 3 to 12, a small share of the map tiles', () {
+    final terrain = terrainTilesFor(city);
+    expect(terrain, tilesFor(city, maxZoom: 12) - tilesFor(city, maxZoom: 2));
+    expect(terrain, lessThan(tilesFor(city) / 3));
+    expect(
+      estimatedAreaBytes(city),
+      estimatedBytes(tilesFor(city)) + estimatedTerrainBytes(terrain),
+    );
+  });
 }

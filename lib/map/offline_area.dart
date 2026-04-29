@@ -10,6 +10,11 @@ abstract final class OfflineLimits {
 
   /// The vector tiles stop at zoom 14; closer views draw these larger.
   static const maxZoom = 14;
+
+  /// Terrain for hill shading, from the open terrain tiles (D-030): zoom 3
+  /// to 12, the range the map styles give it.
+  static const terrainMinZoom = 3;
+  static const terrainMaxZoom = 12;
 }
 
 /// A box to keep offline, in degrees.
@@ -46,6 +51,21 @@ const _sharedBytes = 8704 * 1024;
 /// about 15 KB, more in cities and less in open country. Shown as an
 /// estimate, never as a promise; the download itself stops past 50 MB.
 int estimatedBytes(int tiles) => _sharedBytes + tiles * 15 * 1024;
+
+/// Terrain tiles that come with [area]. They are not OpenFreeMap's, so
+/// they do not count against its limits.
+int terrainTilesFor(Area area) =>
+    tilesFor(area, maxZoom: OfflineLimits.terrainMaxZoom) -
+    tilesFor(area, maxZoom: OfflineLimits.terrainMinZoom - 1);
+
+/// A rough size for terrain: about 64 KB a tile (E-028: 16 tiles around
+/// Ooty came to 1.05 MB); more in mountains, less on plains.
+int estimatedTerrainBytes(int tiles) => tiles * 64 * 1024;
+
+/// Map and terrain together: what the phone will hold for [area].
+int estimatedAreaBytes(Area area) =>
+    estimatedBytes(tilesFor(area)) +
+    estimatedTerrainBytes(terrainTilesFor(area));
 
 /// Whether [area] fits in one download, by tiles and by estimated size.
 bool fitsOneDownload(Area area) {
