@@ -457,6 +457,10 @@ class JourneyStore extends _$JourneyStore {
     );
   });
 
+  /// Takes [journeyId] out of its group, on this phone.
+  Future<void> deleteMembership(int journeyId) =>
+      (delete(memberships)..where((m) => m.journeyId.equals(journeyId))).go();
+
   Future<MembershipRow?> membershipOf(int journeyId) =>
       _membershipOf(journeyId).getSingleOrNull();
 

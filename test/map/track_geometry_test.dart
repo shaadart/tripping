@@ -1,6 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tripping/group/group_sync.dart';
+import 'package:tripping/group/sharing.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
 import 'package:tripping/map/track_geometry.dart';
@@ -288,5 +290,48 @@ void main() {
 
       expect(stored.single, hasLength(1));
     });
+  });
+
+  test('companions on the map: fresh, aging or stale, ended ones gone', () {
+    Companion companion(String name, int ageSeconds, {JourneyPhase? phase}) =>
+        Companion(
+          participant: name,
+          heardAt: t0,
+          shared: Shared(
+            name: name,
+            phase: phase ?? JourneyPhase.recording,
+            mode: JourneyMode.road,
+            fix: Fix(
+              time: t0.subtract(Duration(seconds: ageSeconds)),
+              latitude: 32,
+              longitude: 77,
+            ),
+          ),
+        );
+    final features =
+        companionFeatures([
+              companion('Asha', 5),
+              companion('Ravi', 90),
+              companion('Meera', 900),
+              companion('Tom', 5, phase: JourneyPhase.ended),
+              Companion(
+                participant: 'x',
+                heardAt: t0,
+                shared: const Shared(
+                  name: 'NoFix',
+                  phase: JourneyPhase.recording,
+                  mode: JourneyMode.road,
+                ),
+              ),
+            ], t0)['features']!
+            as List;
+    expect(
+      [for (final f in features) (f as Map)['properties']],
+      [
+        {'name': 'Asha', 'freshness': 'live', 'label': 'Asha'},
+        {'name': 'Ravi', 'freshness': 'aging', 'label': 'Ravi · 1 min'},
+        {'name': 'Meera', 'freshness': 'stale', 'label': 'Meera · 15 min'},
+      ],
+    );
   });
 }

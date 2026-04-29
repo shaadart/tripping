@@ -21,6 +21,7 @@ import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
 import '../group/group_sync.dart';
 import '../group/invite.dart';
+import '../group/sharing.dart';
 import 'figure.dart';
 import 'format.dart';
 import 'group_screens.dart';
@@ -168,6 +169,7 @@ class _RecordScreenState extends State<RecordScreen>
       _syncTicker();
       _followRoute(state);
       _followGroup(state);
+      _share(state);
       _follow();
       _trackCourse();
     });
@@ -428,21 +430,97 @@ class _RecordScreenState extends State<RecordScreen>
     _groupJourney = journey?.id;
     unawaited(_groupWatch?.cancel());
     _groupWatch = null;
+    final was = _membership;
     _membership = null;
-    unawaited(widget.group?.follow(null, ''));
+    final group = widget.group;
+    if (group != null) {
+      // A journey in a group has ended: say so, and the inviter's ending
+      // ends the group (D-037).
+      unawaited(
+        journey == null && was != null
+            ? group.finish(endGroup: was.role == GroupRole.creator)
+            : group.follow(null),
+      );
+    }
     if (journey == null) return;
     final join = _pendingJoin;
     _pendingJoin = null;
     if (join != null) unawaited(_saveJoin(journey, join));
     _groupWatch = store.watchMembership(journey.id).listen((membership) {
       if (mounted) setState(() => _membership = membership);
-      unawaited(
-        widget.group?.follow(
-          membership,
-          widget.settings?.name.value ?? 'Companion',
-        ),
-      );
+      unawaited(widget.group?.follow(membership));
+      _share(_state);
     });
+  }
+
+  /// Hands the group what there is to say: the journey's phase and its
+  /// newest saved fix (never one not yet saved).
+  void _share(RecorderState state) {
+    final group = widget.group;
+    if (group == null || _membership == null) return;
+    final (journey, phase, progress) = switch (state) {
+      Recording(:final journey, :final progress) => (
+        journey,
+        JourneyPhase.recording,
+        progress,
+      ),
+      Paused(:final journey, :final progress) ||
+      Interrupted(
+        :final journey,
+        :final progress,
+      ) => (journey, JourneyPhase.paused, progress),
+      Idle() => (null, null, null),
+    };
+    if (journey == null || phase == null || progress == null) return;
+    group.update(
+      Shared(
+        name: widget.settings?.name.value ?? 'Companion',
+        phase: phase,
+        mode: journey.mode,
+        fix: progress.lastFix,
+      ),
+    );
+  }
+
+  /// Leaves the group (a member) or ends it for everyone (the inviter);
+  /// the journey goes on.
+  Future<void> _leaveGroup() async {
+    final membership = _membership;
+    final store = widget.waypoints;
+    if (membership == null || store == null) return;
+    final inviter = membership.role == GroupRole.creator;
+    final ended = widget.group?.status.value?.ended ?? false;
+    final sure = ended
+        ? true
+        : await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(inviter ? 'End the group?' : 'Leave the group?'),
+              content: Text(
+                inviter
+                    ? 'Everyone stops sharing with this group. Your journey '
+                          'goes on.'
+                    : 'You stop sharing your position with the group. Your '
+                          'journey goes on.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Stay'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(inviter ? 'End group' : 'Leave'),
+                ),
+              ],
+            ),
+          );
+    if (!(sure ?? false)) return;
+    final group = widget.group;
+    if (group != null) {
+      await (inviter && !ended ? group.endGroup() : group.leave());
+    }
+    await store.deleteMembership(membership.journeyId);
   }
 
   Future<void> _saveJoin(JourneyRow journey, Invite invite) async {
@@ -787,6 +865,14 @@ class _RecordScreenState extends State<RecordScreen>
                           membership: _membership,
                           status: widget.group?.status,
                           now: now,
+                          here: switch (state) {
+                            Recording(:final latestFix?) => latestFix,
+                            Recording(:final progress) ||
+                            Paused(:final progress) ||
+                            Interrupted(:final progress) => progress.lastFix,
+                            Idle() => null,
+                          },
+                          onLeave: _leaveGroup,
                           onInvite: _invite,
                           onJoin: _join,
                         ),
@@ -1286,23 +1372,29 @@ class _DestinationLine extends StatelessWidget {
   }
 }
 
-/// The journey's group, in plain words: reachable or not, and who was
-/// heard how long ago. Never more: hearing from someone is not knowing
-/// where they are (positions come in G3).
+/// The journey's group, in plain words: reachable or not, and each
+/// companion's position with its age, from their newest saved fix. An old
+/// position is said to be old, never shown as current.
 class _GroupLine extends StatelessWidget {
   const _GroupLine({
     required this.membership,
     required this.status,
     required this.now,
+    required this.here,
     required this.onInvite,
     required this.onJoin,
+    required this.onLeave,
   });
 
   final MembershipRow? membership;
   final ValueListenable<GroupStatus?>? status;
   final DateTime now;
+
+  /// This phone's newest fix, to say how far companions are.
+  final Fix? here;
   final VoidCallback onInvite;
   final VoidCallback onJoin;
+  final VoidCallback onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -1323,10 +1415,8 @@ class _GroupLine extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final muted = text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant);
     final host = membership.hostName;
-    final title = switch (membership.role) {
-      GroupRole.creator => 'Your group',
-      GroupRole.member => "In ${host ?? 'a'}'s group",
-    };
+    final inviter = membership.role == GroupRole.creator;
+    final title = inviter ? 'Your group' : "In ${host ?? 'a'}'s group";
     Widget body(GroupStatus? status) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1334,18 +1424,16 @@ class _GroupLine extends StatelessWidget {
         Text(switch (status) {
           null => 'Not connected: positions are not shared',
           GroupStatus(:final problem?) => problem,
+          GroupStatus(ended: true) =>
+            '${host ?? 'The inviter'} ended the group: nothing is shared now',
           GroupStatus(connected: false) =>
-            "Not connected: the group can't hear from this phone",
+            "Not connected: the group can't see this phone now",
           GroupStatus(connected: true) =>
-            'Connected to the group · positions are not shared yet',
+            'Connected · sharing your position with the group',
         }, style: muted),
-        if (status != null) ...[
+        if (status != null && !status.ended) ...[
           for (final companion in status.companions)
-            Text(
-              '${companion.name} · heard '
-              '${age(_atLeastZero(now.difference(companion.heardAt)))} ago',
-              style: text.bodyMedium,
-            ),
+            _companion(companion, text, muted),
           if (status.connected && status.heard && status.companions.isEmpty)
             Text('No one else has joined yet', style: muted),
         ],
@@ -1367,9 +1455,52 @@ class _GroupLine extends StatelessWidget {
               null => body(null),
             },
           ),
-          TextButton(onPressed: onInvite, child: const Text('Invite')),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              TextButton(onPressed: onInvite, child: const Text('Invite')),
+              TextButton(
+                onPressed: onLeave,
+                child: Text(inviter ? 'End group' : 'Leave group'),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _companion(Companion companion, TextTheme text, TextStyle? muted) {
+    final shared = companion.shared;
+    final fix = shared.fix;
+    final here = this.here;
+    if (shared.phase == JourneyPhase.ended) {
+      return Text(
+        '${shared.name} · ended their journey · '
+        '${age(_atLeastZero(now.difference(companion.heardAt)))} ago',
+        style: muted,
+      );
+    }
+    if (fix == null) {
+      return Text(
+        '${shared.name} · no position yet · heard '
+        '${age(_atLeastZero(now.difference(companion.heardAt)))} ago',
+        style: muted,
+      );
+    }
+    final old = _atLeastZero(now.difference(fix.time));
+    final freshness = freshnessOf(old, shared.mode);
+    return Text(
+      [
+        shared.name,
+        if (here != null) distanceAndDirection(here, fix),
+        if (shared.phase == JourneyPhase.paused) 'paused',
+        switch (freshness) {
+          Freshness.stale => 'last seen ${age(old)} ago',
+          _ => '${age(old)} ago',
+        },
+      ].join(' · '),
+      style: freshness == Freshness.live ? text.bodyMedium : muted,
     );
   }
 

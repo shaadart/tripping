@@ -56,5 +56,15 @@ abstract interface class RelayRoom {
   /// [connected].
   Future<void> publish(int seq, String box);
 
+  /// Whether the inviter has ended the group.
+  Stream<bool> get ended;
+
+  /// Ends the group for everyone; only its inviter may.
+  Future<void> end();
+
+  /// Takes this member out of the group: its entries go, the group stays.
+  Future<void> leave();
+
+  /// Stops listening; the membership stays.
   Future<void> close();
 }

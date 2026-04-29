@@ -10,13 +10,14 @@ import '../group/invite.dart';
 import '../journey/journey.dart';
 import 'settings.dart';
 
-/// Says, in one place, what a group does in this version: membership is
-/// kept on the phone, companions appear once phones reach the relay, and
-/// positions are not shared yet. A scan or a join is never connectivity.
+/// Says, in one place, what joining a group means (D-037): joining is the
+/// choice to share, and sharing ends with the journey, with leaving, or
+/// when the inviter ends the group. A scan or a join is never connectivity.
 const groupNote =
-    'Joining is saved on this phone, even without a connection. '
-    'Companions appear once your phones reach the group. Positions are not '
-    'shared yet.';
+    'Everyone in the group sees your position while your journey records, '
+    'until you leave the group or end your journey, or the inviter ends '
+    'it. Positions are sealed: the relay cannot read them. Joining is saved '
+    'on this phone, even without a connection.';
 
 /// The user's name for groups: the one saved, or asked for once. Null if
 /// they back out.

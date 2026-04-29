@@ -47,11 +47,21 @@ Future<void> main() async {
     401,
     {'joined': FirebaseRest.now},
   );
+  await expect(
+    "create it in someone else's name",
+    'PUT',
+    '$r/meta',
+    aToken,
+    401,
+    {'created': FirebaseRest.now, 'by': b},
+  );
   await expect('create the room', 'PUT', '$r/meta', aToken, 200, {
     'created': FirebaseRest.now,
+    'by': a,
   });
   await expect('create it again', 'PUT', '$r/meta', bToken, 401, {
     'created': FirebaseRest.now,
+    'by': b,
   });
   await expect('read it before joining', 'GET', '$r/presence', bToken, 401);
   await expect('list rooms', 'GET', 'rooms', aToken, 401);
@@ -159,6 +169,52 @@ Future<void> main() async {
     200,
     {'joined': FirebaseRest.now},
   );
+
+  // A second room, ended by its inviter (D-037).
+  final e = '${r}x';
+  await expect('another room', 'PUT', '$e/meta', aToken, 200, {
+    'created': FirebaseRest.now,
+    'by': a,
+  });
+  for (final (uid, token) in [(a, aToken), (b, bToken)]) {
+    await fb.call('PUT', fb.at('$e/members/$uid', token), {
+      'joined': FirebaseRest.now,
+    });
+  }
+  await expect('a member cannot end it', 'PATCH', '$e/meta', bToken, 401, {
+    'closed': FirebaseRest.now,
+  });
+  await expect('the inviter ends it', 'PATCH', '$e/meta', aToken, 200, {
+    'closed': FirebaseRest.now,
+  });
+  await expect('it cannot be reopened', 'PUT', '$e/meta', aToken, 401, {
+    'created': FirebaseRest.now,
+    'by': a,
+  });
+  await expect(
+    'no presence in an ended group',
+    'PUT',
+    '$e/presence/$b',
+    bToken,
+    401,
+    presence,
+  );
+  await expect(
+    'no joining an ended group',
+    'PUT',
+    '$e/members/$c',
+    cToken,
+    401,
+    {'joined': FirebaseRest.now},
+  );
+  await expect(
+    'members still see that it ended',
+    'GET',
+    '$e/meta',
+    bToken,
+    200,
+  );
+  await expect('and can still leave', 'DELETE', '$e/members/$b', bToken, 200);
 
   stdout.writeln(failures == 0 ? 'ALL PASS' : '$failures FAILED');
   fb.client.close(force: true);

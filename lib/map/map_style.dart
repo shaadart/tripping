@@ -131,6 +131,62 @@ Future<void> addDestinationLayers(
   );
 }
 
+/// Companions on [source] (see [companionFeatures]): moss and solid when
+/// live, faded when aging, a hollow grey ring when stale; each named, with
+/// its age once it is not live.
+Future<void> addCompanionLayers(
+  MapLibreMapController map,
+  BuildContext context,
+  String source,
+) async {
+  final scheme = Theme.of(context).colorScheme;
+  final moss = scheme.tertiary.toHexStringRGB();
+  await map.addCircleLayer(
+    source,
+    '$source-dots',
+    CircleLayerProperties(
+      circleRadius: 7,
+      circleColor: [
+        'match',
+        ['get', 'freshness'],
+        'stale',
+        'rgba(0,0,0,0)',
+        moss,
+      ],
+      circleOpacity: [
+        'match',
+        ['get', 'freshness'],
+        'aging',
+        0.55,
+        1,
+      ],
+      circleStrokeColor: [
+        'match',
+        ['get', 'freshness'],
+        'stale',
+        '#8A8378',
+        '#FFFFFF',
+      ],
+      circleStrokeWidth: 3,
+    ),
+  );
+  await map.addSymbolLayer(
+    source,
+    '$source-labels',
+    SymbolLayerProperties(
+      textField: ['get', 'label'],
+      textFont: ['Noto Sans Regular'],
+      textSize: 12,
+      textOffset: [0, 1.2],
+      textAnchor: 'top',
+      textColor: scheme.onSurface.toHexStringRGB(),
+      textHaloColor: scheme.surface.toHexStringRGB(),
+      textHaloWidth: 1.5,
+      textOptional: true,
+    ),
+  );
+}
+
 /// Waypoints on [source]: a solid moss dot where you were, a hollow river
 /// ring where you plan to go (nobody has been there), each with its label.
 Future<void> addWaypointLayers(

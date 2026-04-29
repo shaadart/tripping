@@ -14,6 +14,7 @@ import 'package:tripping/group/group_keys.dart';
 import 'package:tripping/group/group_sync.dart';
 import 'package:tripping/group/invite.dart';
 import 'package:tripping/group/relay.dart';
+import 'package:tripping/group/sharing.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
 import 'package:tripping/recording/recorder.dart';
@@ -152,7 +153,7 @@ void main() {
     await giveName(tester, 'Asha');
     await settle(tester);
     expect(find.byType(QrImageView), findsOneWidget);
-    expect(find.textContaining('Companions appear once'), findsOneWidget);
+    expect(find.textContaining('Positions are sealed'), findsOneWidget);
     await tester.tap(find.text('Share invite link'));
     final journey = (recorder.state as Recording).journey;
     final first = Invite.find(shared.single)!;
@@ -293,7 +294,7 @@ void main() {
     );
     await settle(tester);
     expect(
-      find.text('Connected to the group · positions are not shared yet'),
+      find.text('Connected · sharing your position with the group'),
       findsOneWidget,
     );
     expect(relay.published, hasLength(1), reason: 'said "here" on joining');
@@ -305,7 +306,21 @@ void main() {
     // Asha's entry reached the relay 10 s before now, whose clock runs 2 s
     // ahead of this phone's.
     final keys = await tester.runAsync(() => GroupKeys.derive(asha.secret));
-    final box = await tester.runAsync(() => keys!.seal({'name': 'Asha'}, 'a'));
+    // 1 km north of this phone's fix, from 15 s before now.
+    final ashaSaid = Shared(
+      name: 'Asha',
+      phase: JourneyPhase.recording,
+      mode: JourneyMode.road,
+      fix: Fix(
+        time: t0.subtract(const Duration(seconds: 15)),
+        latitude: 32 + 1000 / metersPerDegree,
+        longitude: 77,
+        accuracy: 5,
+      ),
+    );
+    final box = await tester.runAsync(
+      () => keys!.seal(ashaSaid.toMessage(), 'a'),
+    );
     relay.changes.add([
       RelayEntry(
         participant: 'a',
@@ -315,16 +330,27 @@ void main() {
       ),
     ]);
     await settle(tester);
-    expect(find.text('Asha · heard 12 s ago'), findsOneWidget);
+    expect(find.text('Asha · 1.0 km N · 15 s ago'), findsOneWidget);
 
     relay.reach(false);
     await settle(tester);
     expect(
-      find.text("Not connected: the group can't hear from this phone"),
+      find.text("Not connected: the group can't see this phone now"),
       findsOneWidget,
     );
     // Still said with its age, never as current.
-    expect(find.text('Asha · heard 12 s ago'), findsOneWidget);
+    expect(find.text('Asha · 1.0 km N · 15 s ago'), findsOneWidget);
+
+    // Leaving: confirmed, the entries go, the journey goes on.
+    relay.reach(true);
+    await settle(tester);
+    await tester.tap(find.text('Leave group'));
+    await frames(tester);
+    expect(find.text('Leave the group?'), findsOneWidget);
+    await tapReal(tester, 'Leave');
+    expect(relay.left, 1);
+    expect(find.text('Invite companions'), findsOneWidget);
+    expect(recorder.state, isA<Recording>());
     await cleanUp(tester);
   });
 }

@@ -46,7 +46,10 @@ class FirebaseRelay implements Relay {
     final ref = db.ref('rooms/$room');
     if (create) {
       try {
-        await ref.child('meta').set({'created': ServerValue.timestamp});
+        await ref.child('meta').set({
+          'created': ServerValue.timestamp,
+          'by': uid,
+        });
       } on FirebaseException {
         // Already made (an earlier start of this journey): fine.
       }
@@ -133,6 +136,25 @@ class _FirebaseRoom implements RelayRoom {
       'at': ServerValue.timestamp,
       'box': box,
     });
+  }
+
+  @override
+  Stream<bool> get ended async* {
+    await _member.future;
+    yield* _ref
+        .child('meta/closed')
+        .onValue
+        .map((event) => event.snapshot.value != null);
+  }
+
+  @override
+  Future<void> end() =>
+      _ref.child('meta').update({'closed': ServerValue.timestamp});
+
+  @override
+  Future<void> leave() async {
+    await _ref.child('presence/$_uid').remove();
+    await _ref.child('members/$_uid').remove();
   }
 
   @override

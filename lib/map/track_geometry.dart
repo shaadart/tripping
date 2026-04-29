@@ -3,6 +3,8 @@ import 'dart:math';
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../journey/simplify.dart';
+import '../group/group_sync.dart';
+import '../group/sharing.dart';
 
 /// Metres per pixel at zoom 0 on the equator in MapLibre's 512-pixel world.
 const _metersPerPixelAtZoom0 = 2 * pi * 6378137 / 512;
@@ -270,4 +272,42 @@ Map<String, Object> destinationFeatures(
       'coordinates': [longitude, latitude],
     },
   },
+]);
+
+/// Companions with a position, as points with `name`, `label` and
+/// `freshness` (`live`, `aging` or `stale`, by the age of their fix at
+/// [now]). Without a position, a companion is not on the map.
+Map<String, Object> companionFeatures(
+  List<Companion> companions,
+  DateTime now,
+) => _collection([
+  for (final companion in companions)
+    if (companion.shared case Shared(
+      :final fix?,
+      :final phase,
+      :final mode,
+    ) when phase != JourneyPhase.ended)
+      () {
+        final old = now.difference(fix.time);
+        final freshness = freshnessOf(
+          old.isNegative ? Duration.zero : old,
+          mode,
+        );
+        final minutes = old.inMinutes;
+        return {
+          'type': 'Feature',
+          'properties': {
+            'name': companion.name,
+            'freshness': freshness.name,
+            'label': freshness == Freshness.live
+                ? companion.name
+                : '${companion.name} · '
+                      '${minutes < 60 ? '$minutes min' : '${old.inHours} h'}',
+          },
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [fix.longitude, fix.latitude],
+          },
+        };
+      }(),
 ]);

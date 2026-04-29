@@ -1,15 +1,21 @@
-// A second group member on this computer, for G2 on one phone: joins the
-// group of an invitation link, says "here" with a sealed name every 30 s,
-// like the app, and prints whom it hears and how long ago.
+// A second group member on this computer, for G2 and G3 on one phone:
+// joins the group of an invitation link, tells it every 30 s, like an
+// expedition, that it stands at Ooty Lake (a public place, never this
+// computer's location), and prints what it hears: name, phase, distance
+// from the lake and age.
 //
 //   dart run tool/group_peer.dart '<tripping://invite/join?…>' \
-//       [--name 'Computer'] [--minutes 10]
+//       [--name 'Computer'] [--minutes 10] [--at lat,lon]
+//
+// --at moves it elsewhere; use only public places.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:tripping/group/group_keys.dart';
 import 'package:tripping/group/invite.dart';
+import 'package:tripping/group/sharing.dart';
+import 'package:tripping/journey/journey.dart';
 
 import 'src/firebase_rest.dart';
 
@@ -29,6 +35,10 @@ Future<void> main(List<String> args) async {
 
   final name = option('name', 'Computer');
   final minutes = int.parse(option('minutes', '10'));
+  final [atLat, atLon] = [
+    for (final part in option('at', '${_lake.$1},${_lake.$2}').split(','))
+      double.parse(part),
+  ];
   final fb = FirebaseRest.fromSettings();
   final keys = await GroupKeys.derive(invite.secret);
   final (me, token) = await fb.signUp();
@@ -51,15 +61,25 @@ Future<void> main(List<String> args) async {
   var seq = 0;
   Future<void> say() async {
     final before = DateTime.now().millisecondsSinceEpoch;
-    final (status, body) = await fb.call(
-      'PUT',
-      fb.at('$room/presence/$me', token),
-      {
-        'seq': ++seq,
-        'at': FirebaseRest.now,
-        'box': await keys.seal({'name': name}, me),
-      },
-    );
+    final (status, body) = await fb
+        .call('PUT', fb.at('$room/presence/$me', token), {
+          'seq': ++seq,
+          'at': FirebaseRest.now,
+          'box': await keys.seal(
+            Shared(
+              name: name,
+              phase: JourneyPhase.recording,
+              mode: JourneyMode.expedition,
+              fix: Fix(
+                time: DateTime.now().toUtc(),
+                latitude: atLat,
+                longitude: atLon,
+                accuracy: 5,
+              ),
+            ).toMessage(),
+            me,
+          ),
+        });
     final after = DateTime.now().millisecondsSinceEpoch;
     if (status == 200) {
       final at = (jsonDecode(body) as Map)['at'] as int;
@@ -73,12 +93,23 @@ Future<void> main(List<String> args) async {
     for (final MapEntry(:key, :value) in presence.entries) {
       if (key == me || value is! Map) continue;
       final message = await keys.open('${value['box']}', '$key');
+      final shared = message == null ? null : Shared.fromMessage(message);
       final at = value['at'];
+      if (shared == null || at is! int) {
+        log('an entry that does not open (from ${'$key'.substring(0, 6)})');
+        continue;
+      }
+      final fix = shared.fix;
+      final lake = Fix(
+        time: DateTime.now(),
+        latitude: atLat,
+        longitude: atLon,
+      );
       log(
-        message == null || at is! int
-            ? 'an entry that does not open (from ${'$key'.substring(0, 6)})'
-            : 'heard ${message['name']} seq=${value['seq']} '
-                  '${((now - at) / 1000).toStringAsFixed(1)} s ago',
+        'heard ${shared.name} seq=${value['seq']} ${shared.phase.name} '
+        '${shared.mode.name} '
+        '${fix == null ? 'no position' : '${distanceAndDirection(lake, fix)} from here, fix ${((now - fix.time.millisecondsSinceEpoch) / 1000).round()} s old'}, '
+        'received ${((now - at) / 1000).toStringAsFixed(1)} s ago',
       );
     }
   }
@@ -117,3 +148,6 @@ Future<void> main(List<String> args) async {
   fb.client.close(force: true);
   exit(0);
 }
+
+/// Ooty Lake, a public place: where this test member says it is.
+const _lake = (11.4065, 76.6872);

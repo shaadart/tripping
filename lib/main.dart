@@ -91,16 +91,23 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
     final recorder = await Recorder.open(store, location);
     // Open-source search and routing over OpenStreetMap (D-026).
     final planner = RoutePlanner(store, ValhallaRouter());
+    // Positions shared with the journey's group (G2, G3; D-034, D-037).
+    final group = GroupSync(FirebaseRelay());
     return RecordScreen(
       recorder: recorder,
       location: location,
       system: const ChannelSystemAccess(),
-      mapBuilder: (state, now) =>
-          JourneyMap(state: state, store: store, now: now, planner: planner),
+      mapBuilder: (state, now) => JourneyMap(
+        state: state,
+        store: store,
+        now: now,
+        planner: planner,
+        group: group.status,
+      ),
       places: PhotonSearch(),
       planner: planner,
       settings: settings,
-      group: GroupSync(FirebaseRelay()),
+      group: group,
       waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
       savedOffline: offline.saved,

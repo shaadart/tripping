@@ -8,6 +8,9 @@ class FakeRelay implements Relay, RelayRoom {
   final connection = StreamController<bool>.broadcast();
   final changes = StreamController<List<RelayEntry>>.broadcast();
   final published = <(int, String)>[];
+  final endings = StreamController<bool>.broadcast();
+  var endedByMe = 0;
+  var left = 0;
   final opened = <(String, bool)>[];
   var reachable = false;
   var closed = 0;
@@ -40,6 +43,15 @@ class FakeRelay implements Relay, RelayRoom {
     if (!reachable) throw StateError('would have been queued');
     published.add((seq, box));
   }
+
+  @override
+  Stream<bool> get ended => endings.stream;
+
+  @override
+  Future<void> end() async => endedByMe++;
+
+  @override
+  Future<void> leave() async => left++;
 
   @override
   Future<void> close() async => closed++;

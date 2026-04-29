@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' show Point;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../app/theme.dart';
+import '../group/group_sync.dart';
 import '../journey/geo.dart';
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
@@ -62,6 +65,7 @@ class JourneyMap extends StatefulWidget {
     required this.store,
     required this.now,
     this.planner,
+    this.group,
   });
 
   final RecorderState state;
@@ -70,6 +74,9 @@ class JourneyMap extends StatefulWidget {
 
   /// Destinations and routes to draw; also lets a long press choose one.
   final RoutePlanner? planner;
+
+  /// Companions to draw, with how fresh their positions are (G3).
+  final ValueListenable<GroupStatus?>? group;
 
   @override
   State<JourneyMap> createState() => _JourneyMapState();
@@ -82,6 +89,10 @@ class _JourneyMapState extends State<JourneyMap> {
   static const _waypointSource = 'waypoints';
   static const _routeSource = 'route';
   static const _destinationSource = 'destination';
+  static const _companionSource = 'companions';
+
+  /// The companions last drawn, to skip redrawing what has not changed.
+  String? _companionsDrawn;
 
   MapLibreMapController? _map;
   bool _styleReady = false;
@@ -146,6 +157,10 @@ class _JourneyMapState extends State<JourneyMap> {
       await map.addGeoJsonSource(_destinationSource, trackFeatures(const []));
       if (!mounted) return;
       await addDestinationLayers(map, context, _destinationSource);
+      await map.addGeoJsonSource(_companionSource, trackFeatures(const []));
+      if (!mounted) return;
+      await addCompanionLayers(map, context, _companionSource);
+      _companionsDrawn = null;
       await map.addCircleLayer(
         _positionSource,
         'accuracy',
@@ -195,6 +210,7 @@ class _JourneyMapState extends State<JourneyMap> {
   Future<void> _sync() async {
     final map = _map;
     if (map == null || !_styleReady) return;
+    await _drawCompanions(map);
     final state = widget.state;
     final (journey, progress) = switch (state) {
       Recording(:final journey, :final progress) ||
@@ -375,6 +391,21 @@ class _JourneyMapState extends State<JourneyMap> {
   }
 
   /// Keeps the waypoint layer in step with the store for [journeyId].
+  /// Companions where they last were, solid when live and hollow grey
+  /// when stale; redrawn only when something changed (ages move each
+  /// second, but a label only each minute).
+  Future<void> _drawCompanions(MapLibreMapController map) async {
+    final status = widget.group?.value;
+    final features = companionFeatures(
+      status == null || status.ended ? const [] : status.companions,
+      widget.now,
+    );
+    final drawn = jsonEncode(features);
+    if (drawn == _companionsDrawn) return;
+    _companionsDrawn = drawn;
+    await map.setGeoJsonSource(_companionSource, features);
+  }
+
   /// Terrain-forward on an expedition, quieter on the road (D2).
   Future<void> _shade(MapLibreMapController map, JourneyMode? mode) async {
     final strength = terrainShading(lookOf(context).look.name, mode);
@@ -588,7 +619,19 @@ class _JourneyMapState extends State<JourneyMap> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    widget.group?.addListener(_groupChanged);
+  }
+
+  void _groupChanged() {
+    final map = _map;
+    if (map != null && _styleReady) _serially(() => _drawCompanions(map));
+  }
+
+  @override
   void dispose() {
+    widget.group?.removeListener(_groupChanged);
     _routeWatch?.cancel();
     widget.planner?.pending.removeListener(_drawPending);
     _blankTimer?.cancel();
