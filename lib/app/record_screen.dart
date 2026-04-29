@@ -15,6 +15,7 @@ import '../places/polyline.dart';
 import '../routing/route_planner.dart';
 import '../routing/route_progress.dart';
 import '../routing/router.dart';
+import '../recording/course.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
@@ -116,6 +117,11 @@ class _RecordScreenState extends State<RecordScreen>
   DateTime? _followedFix;
   DateTime? _replannedAt;
 
+  /// The direction of travel on an expedition, for "ahead" or "left".
+  Course _course = Course();
+  DateTime? _coursedFix;
+  double? _heading;
+
   /// Android facts, refreshed on start and whenever the user comes back
   /// (they may have changed a setting meanwhile).
   bool? _notificationsShown;
@@ -134,6 +140,7 @@ class _RecordScreenState extends State<RecordScreen>
       _syncTicker();
       _followRoute(state);
       _follow();
+      _trackCourse();
     });
     _syncTicker();
     _followRoute(_state);
@@ -278,6 +285,9 @@ class _RecordScreenState extends State<RecordScreen>
       _progress = null;
       _followedFix = null;
       _replannedAt = null;
+      _course = Course();
+      _coursedFix = null;
+      _heading = null;
       if (journey != null) {
         final pending = planner.pending.value;
         if (pending != null) {
@@ -343,6 +353,15 @@ class _RecordScreenState extends State<RecordScreen>
     final unconnected =
         follower.kind == RouteKind.straight && (why == null || why.offline);
     if (progress.offRoute || unconnected) _replan();
+  }
+
+  void _trackCourse() {
+    final state = _state;
+    if (state is! Recording) return;
+    final fix = state.latestFix;
+    if (fix == null || fix.time == _coursedFix) return;
+    _coursedFix = fix.time;
+    _heading = _course.update(fix);
   }
 
   /// A new way from here, keeping the old one if none comes. [asked] by
@@ -576,6 +595,7 @@ class _RecordScreenState extends State<RecordScreen>
                             progress: _progress,
                             now: now,
                             here: _compassFix(state, now),
+                            heading: _heading,
                             onSearch: _chooseDestination,
                             onClear: () {
                               final journey = _routeJourney;
@@ -949,6 +969,7 @@ class _DestinationLine extends StatelessWidget {
     required this.progress,
     required this.now,
     required this.here,
+    required this.heading,
     required this.onSearch,
     required this.onClear,
     required this.onRetry,
@@ -966,6 +987,9 @@ class _DestinationLine extends StatelessWidget {
   /// On an expedition, the live fix to tell the destination's direction
   /// from.
   final Fix? here;
+
+  /// The direction of travel, when known (see [Course]).
+  final double? heading;
   final VoidCallback onSearch;
   final VoidCallback onClear;
   final VoidCallback onRetry;
@@ -1046,17 +1070,13 @@ class _DestinationLine extends StatelessWidget {
       route.latitude,
       route.longitude,
     );
-    final heading = here.heading;
-    final moving = (here.speed ?? 0) >= _movingAbove && heading != null;
+    final heading = this.heading;
     return [
       '${kilometres(meters)} ${compassPoint(bearing)} '
           '(${bearing.round() % 360}°) in a straight line',
-      if (moving) relativeDirection(bearing, heading),
+      if (heading != null) relativeDirection(bearing, heading),
     ].join(' · ');
   }
-
-  /// Slower than this, the GPS's direction of travel is not to be trusted.
-  static const _movingAbove = 0.5;
 
   /// The time of day [seconds] from [now]: an estimate, said as one.
   String _clock(BuildContext context, double seconds) =>
