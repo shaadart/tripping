@@ -35,6 +35,7 @@ void main() {
   late List<String> shared;
   Invite? scanned;
   GroupSync? group;
+  final mapNetwork = <bool>[];
   final asha = Invite.create(hostGroup, 'Asha');
 
   setUp(() async {
@@ -46,6 +47,7 @@ void main() {
     shared = [];
     scanned = null;
     group = null;
+    mapNetwork.clear();
   });
   tearDown(() => dir.deleteSync(recursive: true));
 
@@ -73,6 +75,9 @@ void main() {
           waypoints: store,
           settings: settings,
           group: group,
+          onMapNetworkChanged: (enabled) async {
+            mapNetwork.add(enabled);
+          },
           // Stands in for the camera: "sees" [scanned] at once.
           scannerBuilder: (context) => Scaffold(
             body: TextButton(
@@ -354,4 +359,112 @@ void main() {
     expect(recorder.state, isA<Recording>());
     await cleanUp(tester);
   });
+  testWidgets('paused cold open does not start GPS, group or map network', (
+    tester,
+  ) async {
+    final relay = FakeRelay()..reachable = true;
+    group = GroupSync(relay);
+    await tester.runAsync(() async {
+      final journey = await store.startJourney(JourneyMode.expedition, at: t0);
+      await store.pause(journey.id, at: t0);
+      await store.saveMembership(
+        journey.id,
+        groupId: asha.groupId,
+        secret: asha.secret,
+        role: GroupRole.member,
+        hostName: 'Asha',
+        at: t0,
+      );
+    });
+    await show(tester);
+    await settle(tester);
+    expect(recorder.state, isA<Paused>());
+    expect(location.listening, isFalse);
+    expect(relay.resumptions, 0);
+    expect(relay.opened, isEmpty);
+    expect(mapNetwork, [false]);
+    final suspensions = relay.suspensions;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settle(tester);
+    expect(relay.suspensions, greaterThan(suspensions));
+    expect(relay.resumptions, 0);
+    expect(
+      find.textContaining('Journey paused · group updates stopped'),
+      findsOneWidget,
+    );
+    await cleanUp(tester);
+  });
+
+  testWidgets(
+    'sharing pause keeps recording; full pause also stops map updates',
+    (tester) async {
+      final relay = FakeRelay()..reachable = true;
+      group = GroupSync(relay, clock: () => t0);
+      await tester.runAsync(() => settings.setName('Ravi'));
+      await show(tester);
+      await tapReal(tester, 'Expedition');
+      await act(tester, () async => location.emit(walkFix(0)));
+      final journey = (recorder.state as Recording).journey;
+      await tester.runAsync(
+        () => store.saveMembership(
+          journey.id,
+          groupId: asha.groupId,
+          secret: asha.secret,
+          role: GroupRole.member,
+          hostName: 'Asha',
+          at: t0,
+        ),
+      );
+      await settle(tester);
+      await tester.ensureVisible(find.text('Pause sharing'));
+      await tapReal(tester, 'Pause sharing');
+      expect(recorder.state, isA<Recording>());
+      expect(location.listening, isTrue);
+      expect(settings.sharingPaused(journey.uuid), isTrue);
+      expect(group!.status.value?.suspended, isTrue);
+      expect(mapNetwork.last, isTrue);
+      final sent = relay.published.length;
+      relay.reach(false);
+      relay.reach(true);
+      await act(tester, () async => location.emit(walkFix(3)));
+      expect(relay.published, hasLength(sent));
+      await tester.ensureVisible(find.text('Pause'));
+      await tapReal(tester, 'Pause');
+      expect(recorder.state, isA<Paused>());
+      expect(location.listening, isFalse);
+      expect(mapNetwork.last, isFalse);
+      await tester.ensureVisible(find.text('Resume'));
+      await tapReal(tester, 'Resume');
+      expect(recorder.state, isA<Recording>());
+      expect(
+        group!.status.value?.suspended,
+        isTrue,
+        reason: 'full resume respects sharing-only choice',
+      );
+      await tester.ensureVisible(find.text('Resume sharing'));
+      await tapReal(tester, 'Resume sharing');
+      expect(settings.sharingPaused(journey.uuid), isFalse);
+      expect(relay.published.length, greaterThan(sent));
+      await cleanUp(tester);
+    },
+  );
+
+  testWidgets(
+    'ordinary backgrounding keeps recording but disables map activity',
+    (tester) async {
+      await show(tester);
+      await tapReal(tester, 'Expedition');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await act(tester, () async => location.emit(walkFix(0)));
+      expect(recorder.state, isA<Recording>());
+      expect(location.listening, isTrue);
+      expect(mapNetwork.last, isFalse);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(mapNetwork.last, isTrue);
+      await cleanUp(tester);
+    },
+  );
 }

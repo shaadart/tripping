@@ -82,7 +82,7 @@ class JourneyMap extends StatefulWidget {
   State<JourneyMap> createState() => _JourneyMapState();
 }
 
-class _JourneyMapState extends State<JourneyMap> {
+class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   static const _historySource = 'track-history';
   static const _tailSource = 'track-tail';
   static const _positionSource = 'position';
@@ -111,6 +111,34 @@ class _JourneyMapState extends State<JourneyMap> {
   /// The journey's waypoints as drawn, to answer a tap on one.
   List<WaypointRow> _waypoints = const [];
   Timer? _blankTimer;
+  bool _visible = true;
+  bool get _polling =>
+      _visible && widget.state is! Paused && widget.state is! Interrupted;
+
+  void _syncPolling() {
+    if (!_polling) {
+      _blankTimer?.cancel();
+      _blankTimer = null;
+    } else if (_styleReady) {
+      _blankTimer ??= Timer.periodic(_blankCheckEvery, (_) {
+        final map = _map;
+        if (map != null) _serially(() => _checkBlank(map));
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _visible = state == AppLifecycleState.resumed;
+    _syncPolling();
+    if (_visible) {
+      // Rebuild the full saved track after background recording; never
+      // draw a shortcut from the former tail to only the newest fix.
+      _journeyId = null;
+      _serially(_sync);
+    }
+  }
+
   StreamSubscription<RouteRow?>? _routeWatch;
   JourneyMode _mode = JourneyMode.expedition;
 
@@ -125,6 +153,7 @@ class _JourneyMapState extends State<JourneyMap> {
   @override
   void didUpdateWidget(JourneyMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncPolling();
     _serially(_sync);
   }
 
@@ -197,10 +226,7 @@ class _JourneyMapState extends State<JourneyMap> {
       _styleReady = true;
       // Checked on its own clock too: with no journey there are no updates,
       // and a check made while the style was still loading must not stick.
-      _blankTimer ??= Timer.periodic(_blankCheckEvery, (_) {
-        final map = _map;
-        if (map != null) _serially(() => _checkBlank(map));
-      });
+      _syncPolling();
       // The style can reload (theme change): redraw everything.
       _journeyId = null;
       await _sync();
@@ -209,7 +235,7 @@ class _JourneyMapState extends State<JourneyMap> {
 
   Future<void> _sync() async {
     final map = _map;
-    if (map == null || !_styleReady) return;
+    if (!_visible || map == null || !_styleReady) return;
     await _drawCompanions(map);
     final state = widget.state;
     final (journey, progress) = switch (state) {
@@ -369,6 +395,7 @@ class _JourneyMapState extends State<JourneyMap> {
   /// the regular updates rather than on "map idle": offline, failed tiles
   /// keep retrying and the map never becomes idle.
   Future<void> _checkBlank(MapLibreMapController map) async {
+    if (!_polling) return;
     final now = DateTime.now();
     final last = _blankCheckedAt;
     if (last != null && now.difference(last) < _blankCheckEvery) return;
@@ -399,6 +426,7 @@ class _JourneyMapState extends State<JourneyMap> {
     final features = companionFeatures(
       status == null || status.ended ? const [] : status.companions,
       widget.now,
+      forceStale: status?.suspended == true,
     );
     final drawn = jsonEncode(features);
     if (drawn == _companionsDrawn) return;
@@ -621,6 +649,10 @@ class _JourneyMapState extends State<JourneyMap> {
   @override
   void initState() {
     super.initState();
+    _visible =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
     widget.group?.addListener(_groupChanged);
   }
 
@@ -631,6 +663,7 @@ class _JourneyMapState extends State<JourneyMap> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.group?.removeListener(_groupChanged);
     _routeWatch?.cancel();
     widget.planner?.pending.removeListener(_drawPending);

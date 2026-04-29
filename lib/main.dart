@@ -21,6 +21,7 @@ import 'journey/journey_store.dart';
 import 'map/area_map.dart';
 import 'map/journey_map.dart';
 import 'map/map_tiles.dart';
+import 'map/map_activity.dart';
 import 'map/offline_area.dart';
 import 'map/offline_maps.dart';
 import 'map/track_map.dart';
@@ -62,23 +63,6 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
     );
     highSun.value = settings.highSun.value;
     settings.highSun.addListener(() => highSun.value = settings.highSun.value);
-    // Maps draw a pinned tile release, so offline areas keep matching; the
-    // tile server's terms ask for a named app and at most four requests at a
-    // time (D-026).
-    final tiles = await MapTiles.open(documents, settings);
-    MapTiles.current = tiles;
-    final offline = MapLibreOfflineMaps(tiles);
-    await setHttpHeaders({'User-Agent': MapTiles.userAgent});
-    await setOfflineMaxConcurrentRequests(
-      maxRequestsPerHost: OfflineLimits.parallelRequests,
-    );
-    // Listing fills `offline.saved`, which the trip panel watches.
-    unawaited(offline.list());
-    unawaited(
-      tiles.settle(
-        hasOfflineMaps: () async => (await offline.list()).isNotEmpty,
-      ),
-    );
     // A bench build measures on its own database, never the owner's.
     final file = File(
       '${documents.path}/'
@@ -95,43 +79,74 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
       location = RawFixLog(location, File('${documents.path}/raw_fixes.jsonl'));
     }
     final recorder = await Recorder.open(store, location);
+    MapLibreOfflineMaps? offline;
+    try {
+      // Restore before allowing any map traffic. Map failures cannot hide
+      // the saved journey or prevent using its recorder controls.
+      await MapActivity.setNetworkEnabled(recorder.state is Idle);
+      final tiles = await MapTiles.open(documents, settings);
+      MapTiles.current = tiles;
+      offline = MapLibreOfflineMaps(tiles);
+      await setHttpHeaders({'User-Agent': MapTiles.userAgent});
+      await setOfflineMaxConcurrentRequests(
+        maxRequestsPerHost: OfflineLimits.parallelRequests,
+      );
+      unawaited(offline.list().catchError((Object _) => <OfflineMap>[]));
+    } on Object {
+      offline = null;
+    }
+    final maps = offline;
     // Open-source search and routing over OpenStreetMap (D-026).
     final planner = RoutePlanner(store, ValhallaRouter());
     // Positions shared with the journey's group (G2, G3; D-034, D-037).
     final relay = FirebaseRelay();
-    final group = GroupSync(relay);
-    // Groups of journeys ended over a day ago: take this phone's part out
-    // (G7). Never in the way of starting.
-    unawaited(
-      tidyGroups(
-        store,
-        relay,
-        now: DateTime.now().toUtc(),
-      ).catchError((Object _) => 0),
+    late final GroupSync group;
+    var tidied = false;
+    group = GroupSync(
+      relay,
+      onConnected: () async {
+        if (tidied) return;
+        tidied = true;
+        await tidyGroups(
+          store,
+          relay,
+          now: DateTime.now().toUtc(),
+          shouldContinue: () =>
+              recorder.state is Recording &&
+              group.status.value?.suspended != true,
+        );
+      },
     );
     return RecordScreen(
       recorder: recorder,
       location: location,
       system: const ChannelSystemAccess(),
-      mapBuilder: (state, now) => JourneyMap(
-        state: state,
-        store: store,
-        now: now,
-        planner: planner,
-        group: group.status,
-      ),
+      mapBuilder: (state, now) => maps == null
+          ? const Center(
+              child: Text('Map unavailable. Your journey stays saved.'),
+            )
+          : JourneyMap(
+              state: state,
+              store: store,
+              now: now,
+              planner: planner,
+              group: group.status,
+            ),
       places: PhotonSearch(),
       planner: planner,
       settings: settings,
       group: group,
+      onMapNetworkChanged: MapActivity.setNetworkEnabled,
       waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
-      savedOffline: offline.saved,
-      offlineMapsBuilder: (_) => OfflineMapsScreen(
-        maps: offline,
-        areaMapBuilder: (onArea) =>
-            AreaMap(onArea: onArea, start: _lastKnown(recorder.state)),
-      ),
+      savedOffline: maps?.saved,
+      offlineMapsBuilder: maps == null
+          ? null
+          : (_) => OfflineMapsScreen(
+              maps: maps,
+              areaMapBuilder: (onArea) =>
+                  AreaMap(onArea: onArea, start: _lastKnown(recorder.state)),
+            ),
       historyBuilder: (_) {
         final history = JourneyHistory(store);
         return HistoryScreen(

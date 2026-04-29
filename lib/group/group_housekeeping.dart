@@ -11,12 +11,15 @@ Future<int> tidyGroups(
   JourneyStore store,
   Relay relay, {
   required DateTime now,
+  bool Function()? shouldContinue,
 }) async {
   var tidied = 0;
   final cutoff = now.subtract(GroupSync.expireAfter);
   for (final membership in await store.membershipsEndedBefore(cutoff)) {
+    if (shouldContinue?.call() == false) break;
     try {
       final keys = await GroupKeys.derive(membership.secret);
+      if (shouldContinue?.call() == false) break;
       await relay.leaveRoom(keys.room);
       await store.deleteMembership(membership.journeyId);
       tidied++;

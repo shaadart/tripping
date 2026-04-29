@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../journey/journey.dart';
+import '../net/http.dart';
 import '../journey/journey_store.dart';
 import '../places/place.dart';
 import '../places/polyline.dart';
@@ -20,6 +21,15 @@ class RoutePlanner {
 
   final JourneyStore _store;
   final RouteSource _router;
+  int _generation = 0;
+
+  /// Stops HTTP and rate-limit timers; late answers cannot change the plan.
+  void cancelPending() {
+    _generation++;
+    final router = _router;
+    if (router is CancellableRouteSource) router.cancelPending();
+  }
+
   final DateTime Function() clock;
 
   /// Where the next journey will go, chosen before it starts.
@@ -63,13 +73,16 @@ class RoutePlanner {
     JourneyMode mode, {
     bool keepOnFailure = false,
   }) async {
+    final generation = _generation;
     final destination = await _store.routeOf(journeyId);
-    if (destination == null) return null;
+    if (destination == null || generation != _generation) return null;
     final to = (destination.latitude, destination.longitude);
     PlannedRoute route;
     RouteError? why;
     try {
       route = await _router.route(from, to, mode, at: clock());
+    } on RequestCancelled {
+      return null;
     } on RouteError catch (error) {
       if (keepOnFailure) return error;
       why = error;
@@ -78,7 +91,11 @@ class RoutePlanner {
     // The destination may have changed while the service was answering: a
     // way to the old one must not be kept for the new one.
     final now = await _store.routeOf(journeyId);
-    if (now == null || (now.latitude, now.longitude) != to) return why;
+    if (generation != _generation ||
+        now == null ||
+        (now.latitude, now.longitude) != to) {
+      return why;
+    }
     await _store.saveRoute(
       journeyId,
       kind: route.kind,
@@ -91,7 +108,10 @@ class RoutePlanner {
     return why;
   }
 
-  Future<void> clear(int journeyId) => _store.clearDestination(journeyId);
+  Future<void> clear(int journeyId) {
+    cancelPending();
+    return _store.clearDestination(journeyId);
+  }
 
   /// Places chosen before, newest first.
   Future<List<Place>> recent() async => [

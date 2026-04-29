@@ -69,6 +69,7 @@ class RecordScreen extends StatefulWidget {
     this.scannerBuilder,
     this.shareText,
     this.onToggleHighSun,
+    this.onMapNetworkChanged,
     this.clock = _utcNow,
   });
 
@@ -112,6 +113,8 @@ class RecordScreen extends StatefulWidget {
 
   /// Switches the high-contrast look for bright daylight on or off.
   final VoidCallback? onToggleHighSun;
+
+  final Future<void> Function(bool enabled)? onMapNetworkChanged;
   final DateTime Function() clock;
 
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -126,6 +129,23 @@ class _RecordScreenState extends State<RecordScreen>
   late final StreamSubscription<RecorderState> _changes;
   Timer? _ticker;
   bool _busy = false;
+  bool _visible = true;
+  bool _sharingHeld = false;
+  bool? _mapNetwork;
+  Future<void> _networkChanges = Future.value();
+
+  void _syncMapNetwork() {
+    final enabled = _visible && _state is! Paused && _state is! Interrupted;
+    if (_mapNetwork == enabled) return;
+    _mapNetwork = enabled;
+    _networkChanges = _networkChanges
+        .then((_) async {
+          await widget.onMapNetworkChanged?.call(enabled);
+        })
+        .catchError((Object _) {
+          _tell('Map updates could not be stopped. Close and reopen Tripping.');
+        });
+  }
 
   /// The destination of the journey shown, and the way there.
   StreamSubscription<RouteRow?>? _routeWatch;
@@ -166,15 +186,25 @@ class _RecordScreenState extends State<RecordScreen>
   void initState() {
     super.initState();
     _changes = widget.recorder.changes.listen((state) {
-      setState(() => _state = state);
+      if (_visible) {
+        setState(() => _state = state);
+      } else {
+        _state = state;
+      }
       _syncTicker();
+      _syncMapNetwork();
+      if (state is! Recording) widget.planner?.cancelPending();
       _followRoute(state);
       _followGroup(state);
       _share(state);
       _follow();
       _trackCourse();
     });
+    _visible =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     _syncTicker();
+    _syncMapNetwork();
     _followRoute(_state);
     _followGroup(_state);
     WidgetsBinding.instance.addObserver(this);
@@ -196,7 +226,18 @@ class _RecordScreenState extends State<RecordScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    _visible = state == AppLifecycleState.resumed;
+    _syncTicker();
+    _syncMapNetwork();
+    if (_visible) {
+      setState(() {});
+      // Native Auth can re-arm an empty refresh task on foreground return.
+      final state = _state;
+      if (state is! Recording ||
+          _sharingHeld ||
+          widget.settings?.sharingPaused(state.journey.uuid) == true) {
+        _suspendSharing();
+      }
       unawaited(_refreshSystem());
       _takeLink();
     }
@@ -226,7 +267,7 @@ class _RecordScreenState extends State<RecordScreen>
   /// Ticks once a second only while recording, for the clock and the age of
   /// the last fix.
   void _syncTicker() {
-    if (_state is Recording) {
+    if (_state is Recording && _visible) {
       _ticker ??= Timer.periodic(
         const Duration(seconds: 1),
         (_) => setState(() {}),
@@ -260,6 +301,9 @@ class _RecordScreenState extends State<RecordScreen>
   Future<void> _pause() async {
     try {
       await widget.recorder.pause();
+      widget.planner?.cancelPending();
+      await widget.group?.suspend();
+      await _networkChanges;
     } catch (error) {
       _tell('Could not pause: $error. Still recording.');
     }
@@ -447,7 +491,6 @@ class _RecordScreenState extends State<RecordScreen>
     if (join != null) unawaited(_saveJoin(journey, join));
     _groupWatch = store.watchMembership(journey.id).listen((membership) {
       if (mounted) setState(() => _membership = membership);
-      unawaited(widget.group?.follow(membership));
       _share(_state);
     });
   }
@@ -471,6 +514,13 @@ class _RecordScreenState extends State<RecordScreen>
       Idle() => (null, null, null),
     };
     if (journey == null || phase == null || progress == null) return;
+    if (state is! Recording ||
+        _sharingHeld ||
+        widget.settings?.sharingPaused(journey.uuid) == true) {
+      _suspendSharing();
+      return;
+    }
+    unawaited(group.follow(_membership));
     group.update(
       Shared(
         name: widget.settings?.name.value ?? 'Companion',
@@ -479,6 +529,36 @@ class _RecordScreenState extends State<RecordScreen>
         fix: progress.lastFix,
       ),
     );
+  }
+
+  void _suspendSharing() {
+    unawaited(
+      widget.group?.suspend().catchError((Object _) {
+        _tell(
+          'Could not stop group sign-in. Close Tripping to finish pausing.',
+        );
+      }),
+    );
+  }
+
+  Future<void> _toggleSharing() async {
+    final state = _state;
+    final settings = widget.settings;
+    if (state is! Recording || settings == null) return;
+    final paused =
+        !(_sharingHeld || settings.sharingPaused(state.journey.uuid));
+    _sharingHeld = true;
+    // Withdrawal stops transport immediately, even if preference saving fails.
+    if (paused) await widget.group?.suspend();
+    try {
+      await settings.setSharingPaused(state.journey.uuid, paused);
+      _sharingHeld = false;
+      if (!mounted) return;
+      setState(() {});
+      _share(_state);
+    } on Object {
+      _tell('Could not save the sharing choice. Group updates stay paused.');
+    }
   }
 
   /// On a road journey following a road route, measures companions along
@@ -875,6 +955,16 @@ class _RecordScreenState extends State<RecordScreen>
                       if (_groups && state is! Idle)
                         _GroupLine(
                           membership: _membership,
+                          paused: state is! Recording,
+                          sharingPaused: switch (state) {
+                            Recording(:final journey) =>
+                              widget.settings?.sharingPaused(journey.uuid) ??
+                                  false,
+                            _ => false,
+                          },
+                          onToggleSharing: state is Recording
+                              ? _toggleSharing
+                              : null,
                           status: widget.group?.status,
                           now: now,
                           here: switch (state) {
@@ -1391,6 +1481,9 @@ class _DestinationLine extends StatelessWidget {
 class _GroupLine extends StatelessWidget {
   const _GroupLine({
     required this.membership,
+    required this.paused,
+    required this.sharingPaused,
+    required this.onToggleSharing,
     required this.status,
     required this.now,
     required this.here,
@@ -1401,6 +1494,9 @@ class _GroupLine extends StatelessWidget {
   });
 
   final MembershipRow? membership;
+  final bool paused;
+  final bool sharingPaused;
+  final VoidCallback? onToggleSharing;
 
   /// Measures companions along this phone's road route, if any.
   final Convoy? convoy;
@@ -1438,22 +1534,30 @@ class _GroupLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: text.titleMedium),
-        Text(switch (status) {
-          null => 'Not connected: positions are not shared',
-          GroupStatus(:final problem?) => problem,
-          GroupStatus(ended: true) =>
-            'This group was closed: nothing is shared now',
-          GroupStatus(refused: true) =>
-            "The group isn't accepting this phone's updates: leave and "
-                'join again',
-          GroupStatus(connected: false, :final offlineSince?) =>
-            'Offline since ${timeOfDay(context, offlineSince)} · sharing '
-                'resumes when the connection returns',
-          GroupStatus(connected: false) =>
-            "Not connected: the group can't see this phone now",
-          GroupStatus(connected: true) =>
-            'Connected · sharing your position with the group',
-        }, style: muted),
+        Text(
+          paused
+              ? 'Journey paused · group updates stopped until you resume'
+              : sharingPaused
+              ? 'Sharing paused · recording stays on this phone'
+              : switch (status) {
+                  null => 'Not connected: positions are not shared',
+                  GroupStatus(:final problem?) => problem,
+                  GroupStatus(suspended: true) => 'Group updates paused',
+                  GroupStatus(ended: true) =>
+                    'This group was closed: nothing is shared now',
+                  GroupStatus(refused: true) =>
+                    "The group isn't accepting this phone's updates: leave and "
+                        'join again',
+                  GroupStatus(connected: false, :final offlineSince?) =>
+                    'Offline since ${timeOfDay(context, offlineSince)} · sharing '
+                        'resumes when the connection returns',
+                  GroupStatus(connected: false) =>
+                    "Not connected: the group can't see this phone now",
+                  GroupStatus(connected: true) =>
+                    'Connected · sharing your position with the group',
+                },
+          style: muted,
+        ),
         if (status != null && !status.ended) ...[
           for (final companion in _inConvoyOrder(status.companions))
             _companion(companion, text, muted),
@@ -1482,6 +1586,13 @@ class _GroupLine extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               TextButton(onPressed: onInvite, child: const Text('Invite')),
+              if (onToggleSharing != null)
+                TextButton(
+                  onPressed: onToggleSharing,
+                  child: Text(
+                    sharingPaused ? 'Resume sharing' : 'Pause sharing',
+                  ),
+                ),
               TextButton(onPressed: onLeave, child: const Text('Leave group')),
             ],
           ),
@@ -1785,7 +1896,7 @@ class _StatusLine extends StatelessWidget {
       Idle() => (null, false, null),
       final Recording recording => _recordingStatus(recording),
       Paused() => (
-        'Paused. Nothing is recorded until you resume.',
+        'Paused. Recording and group updates are stopped until you resume.',
         false,
         null,
       ),

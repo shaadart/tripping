@@ -54,10 +54,14 @@ class GroupStatus {
     this.problem,
     this.offlineSince,
     this.refused = false,
+    this.suspended = false,
   });
 
   /// The relay is reachable now.
   final bool connected;
+
+  /// Transport deliberately stopped; connectivity does not resume it.
+  final bool suspended;
 
   /// The room's entries have been read at least once.
   final bool heard;
@@ -86,12 +90,14 @@ class GroupSync {
     this._relay, {
     this.tick = const Duration(seconds: 1),
     DateTime Function()? clock,
+    this.onConnected,
   }) : _clock = clock ?? _utcNow;
 
   static DateTime _utcNow() => DateTime.now().toUtc();
 
   final Relay _relay;
   final Duration tick;
+  final Future<void> Function()? onConnected;
   final DateTime Function() _clock;
 
   /// Null while the journey shown is in no group.
@@ -138,14 +144,19 @@ class GroupSync {
   Future<void> follow(MembershipRow? membership) async {
     if (membership?.secret == _secret) return;
     // What there is to say stays: it may have arrived just before.
-    await _leaveRoom();
     final generation = ++_generation;
+    await _leaveRoom();
+    if (generation != _generation) return;
     _secret = membership?.secret;
     if (membership == null) return;
     status.value = const GroupStatus();
     try {
       final keys = await GroupKeys.derive(membership.secret);
+      if (generation != _generation) return;
+      await _relay.resume();
+      if (generation != _generation) return;
       final me = await _relay.me();
+      if (generation != _generation) return;
       final room = await _relay.open(
         keys.room,
         create: membership.role == GroupRole.creator,
@@ -160,6 +171,7 @@ class GroupSync {
       _listening
         ..add(
           room.connected.listen((connected) {
+            if (generation != _generation) return;
             _connected = connected;
             final since = status.value?.offlineSince;
             _set(
@@ -171,17 +183,20 @@ class GroupSync {
               // Whatever was said before may not have arrived: say it now.
               _told = null;
               unawaited(_tell());
+              unawaited(onConnected?.call().catchError((Object _) {}));
             }
           }),
         )
         ..add(
           room.ended.listen((ended) {
+            if (generation != _generation) return;
             _ended = ended;
             if (ended) _set(ended: true);
           }),
         )
         ..add(
           room.entries.listen((entries) async {
+            if (generation != _generation) return;
             final silentSince = _clock().subtract(expireAfter);
             for (final entry in entries) {
               if (entry.participant == me) continue;
@@ -205,6 +220,7 @@ class GroupSync {
               }
               if (entry.box.length > maxBox) continue;
               final message = await keys.open(entry.box, entry.participant);
+              if (generation != _generation) return;
               final shared = message == null
                   ? null
                   : Shared.fromMessage(message);
@@ -262,11 +278,13 @@ class GroupSync {
 
   /// Tells the group [_mine] if the policy says so; one at a time.
   Future<void> _tell({bool force = false}) async {
+    final generation = _generation;
     final running = _telling;
     if (running != null) {
       await running;
       if (!force) return;
     }
+    if (generation != _generation) return;
     final (room, keys, me, mine) = (_room, _keys, _me, _mine);
     if (room == null || keys == null || me == null || mine == null) return;
     if (!_connected || _ended) return;
@@ -277,10 +295,10 @@ class GroupSync {
     }
     final telling = () async {
       try {
-        await room.publish(
-          ++_seq,
-          await keys.seal(mine.toMessage(at: now), me),
-        );
+        final box = await keys.seal(mine.toMessage(at: now), me);
+        if (generation != _generation) return;
+        await room.publish(++_seq, box);
+        if (generation != _generation) return;
         _told = mine;
         _toldAt = now;
         if (_refusals > 0) {
@@ -290,12 +308,14 @@ class GroupSync {
       } on Object {
         // Tried again on the next tick; nothing is queued. Refused again
         // and again while reachable: say so.
-        if (_connected && ++_refusals >= 3) _set(refused: true);
+        if (generation == _generation && _connected && ++_refusals >= 3) {
+          _set(refused: true);
+        }
       }
     }();
     _telling = telling;
     await telling;
-    _telling = null;
+    if (identical(_telling, telling)) _telling = null;
   }
 
   /// The journey ended: says so once, if the relay is reachable, then
@@ -309,7 +329,9 @@ class GroupSync {
         mode: mine.mode,
         fix: mine.fix,
       );
-      await _tell(force: true);
+      await _tell(
+        force: true,
+      ).timeout(const Duration(milliseconds: 350), onTimeout: () {});
     }
     await stop();
   }
@@ -317,7 +339,10 @@ class GroupSync {
   /// Leaves the group: this phone's entries go; the group goes on.
   Future<void> leave() async {
     try {
-      await _room?.leave();
+      await _room?.leave().timeout(
+        const Duration(milliseconds: 350),
+        onTimeout: () {},
+      );
     } on Object {
       // Offline: the entries stay until the relay forgets them (G7).
     }
@@ -345,27 +370,46 @@ class GroupSync {
     );
   }
 
-  /// Stops sharing and listening, and forgets the status.
+  /// Full/sharing pause: keep membership and last-known companion data,
+  /// but cancel timers, listeners, queued writes and reconnect activity.
+  Future<void> suspend() async {
+    ++_generation; // Invalidates connecting/decrypting/publishing work now.
+    _mine = null;
+    final previous = status.value;
+    final stopped = _leaveRoom();
+    if (previous != null) {
+      status.value = GroupStatus(
+        suspended: true,
+        heard: previous.heard,
+        companions: previous.companions,
+        ended: previous.ended,
+      );
+    }
+    await stopped;
+  }
+
+  /// Stops sharing and forgets the group shown. Membership stays on disk.
   Future<void> stop() async {
+    ++_generation;
     _mine = null;
     await _leaveRoom();
   }
 
   Future<void> _leaveRoom() async {
-    _generation++;
+    // Retire state before any await; a late callback cannot reconnect or
+    // change a newer session. Closing also releases pending join streams.
+    final room = _room;
+    final subscriptions = List.of(_listening);
     _ticker?.cancel();
     _ticker = null;
-    for (final listening in _listening) {
-      await listening.cancel();
-    }
     _listening.clear();
-    await _room?.close();
     _room = null;
     _keys = null;
     _me = null;
     _secret = null;
     _told = null;
     _toldAt = null;
+    _telling = null;
     _refusals = 0;
     _heard.clear();
     _still.clear();
@@ -373,5 +417,16 @@ class GroupSync {
     _connected = false;
     _ended = false;
     status.value = null;
+    try {
+      await _relay.suspend();
+    } finally {
+      try {
+        await room?.close();
+      } finally {
+        await Future.wait([
+          for (final subscription in subscriptions) subscription.cancel(),
+        ]);
+      }
+    }
   }
 }

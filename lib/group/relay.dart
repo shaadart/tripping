@@ -33,6 +33,13 @@ class RelayUnavailable implements Exception {
 
 /// Where a group's members meet (D-034): Firebase today, replaceable.
 abstract interface class Relay {
+  /// Enables transport for an explicit recording/sharing session.
+  Future<void> resume();
+
+  /// Cancels queued writes and disconnects, including reconnect activity.
+  /// Must not initialise a transport which has never been used.
+  Future<void> suspend();
+
   /// This install's id at the relay, signing in on first use.
   Future<String> me();
 

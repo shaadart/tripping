@@ -14,10 +14,12 @@ class Settings {
     String? tileRelease,
     String? participantId,
     String? name,
+    Set<String> sharingPaused = const {},
   }) : highSun = ValueNotifier(highSun),
        tileRelease = ValueNotifier(tileRelease),
        _participantId = participantId,
-       name = ValueNotifier(name);
+       name = ValueNotifier(name),
+       _sharingPaused = sharingPaused;
 
   /// Reads [file]; a missing or unreadable file means the defaults.
   static Future<Settings> open(File file) async {
@@ -25,9 +27,13 @@ class Settings {
     String? tileRelease;
     String? participantId;
     String? name;
+    var sharingPaused = <String>{};
     try {
       final json = jsonDecode(await file.readAsString());
       if (json is Map) {
+        if (json['sharingPaused'] case final List<Object?> paused) {
+          sharingPaused = paused.whereType<String>().toSet();
+        }
         if (json['highSun'] is bool) highSun = json['highSun'] as bool;
         if (json['tileRelease'] is String) {
           tileRelease = json['tileRelease'] as String;
@@ -50,6 +56,7 @@ class Settings {
       tileRelease: tileRelease,
       participantId: participantId,
       name: name,
+      sharingPaused: sharingPaused,
     );
   }
 
@@ -66,6 +73,20 @@ class Settings {
   final ValueNotifier<String?> name;
 
   String? _participantId;
+  final Set<String> _sharingPaused;
+  Future<void> _writes = Future.value();
+
+  bool sharingPaused(String journey) => _sharingPaused.contains(journey);
+
+  /// A sharing-only pause survives reopening and does not pause recording.
+  Future<void> setSharingPaused(String journey, bool paused) async {
+    if (paused) {
+      _sharingPaused.add(journey);
+    } else {
+      _sharingPaused.remove(journey);
+    }
+    await _save();
+  }
 
   /// This install in every group: 128 random bits, made on first need and
   /// kept. Not tied to the phone, an account or a number.
@@ -92,12 +113,19 @@ class Settings {
     await _save();
   }
 
-  Future<void> _save() async {
+  Future<void> _save() {
+    final result = _writes.then((_) => _write());
+    _writes = result.catchError((Object _) {});
+    return result;
+  }
+
+  Future<void> _write() async {
     // Written beside and renamed over, so a crash never leaves half a file.
     final next = File('${_file.path}.next');
     await next.writeAsString(
       jsonEncode({
         'highSun': highSun.value,
+        if (_sharingPaused.isNotEmpty) 'sharingPaused': _sharingPaused.toList(),
         'tileRelease': ?tileRelease.value,
         'participantId': ?_participantId,
         'name': ?name.value,

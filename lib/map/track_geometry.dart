@@ -279,8 +279,9 @@ Map<String, Object> destinationFeatures(
 /// [now]). Without a position, a companion is not on the map.
 Map<String, Object> companionFeatures(
   List<Companion> companions,
-  DateTime now,
-) => _collection([
+  DateTime now, {
+  bool forceStale = false,
+}) => _collection([
   for (final companion in companions)
     if (companion.shared case Shared(
       :final fix?,
@@ -289,10 +290,9 @@ Map<String, Object> companionFeatures(
     ) when phase != JourneyPhase.ended)
       () {
         final old = now.difference(companion.positionAt ?? fix.time);
-        final freshness = freshnessOf(
-          old.isNegative ? Duration.zero : old,
-          mode,
-        );
+        final freshness = forceStale
+            ? Freshness.stale
+            : freshnessOf(old.isNegative ? Duration.zero : old, mode);
         final minutes = old.inMinutes;
         return {
           'type': 'Feature',

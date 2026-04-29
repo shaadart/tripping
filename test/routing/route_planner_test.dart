@@ -137,6 +137,25 @@ void main() {
     expect(route.kind, isNull);
   });
 
+  test(
+    'pause invalidates a late answer even when the destination is unchanged',
+    () async {
+      final answer = Completer<PlannedRoute>();
+      final asked = Completer<void>();
+      router.answer = () {
+        asked.complete();
+        return answer.future;
+      };
+      await planner.goTo(journey, park);
+      final planning = planner.plan(journey, here, JourneyMode.road);
+      await asked.future;
+      planner.cancelPending();
+      answer.complete(road());
+      await planning;
+      expect((await store.routeOf(journey))!.kind, isNull);
+    },
+  );
+
   test('a waypoint headed for is not kept among recent places', () async {
     await planner.goTo(journey, park, remember: false);
     expect(await planner.recent(), isEmpty);

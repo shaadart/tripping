@@ -152,6 +152,7 @@ class Recorder {
   Future<void> _queue = Future.value();
   RecorderState _state = const Idle();
   StreamSubscription<Fix>? _subscription;
+  int _segmentGeneration = 0;
   FixFilter? _filter;
   TrackStats? _stats;
   Duration _closedTime = Duration.zero;
@@ -244,6 +245,7 @@ class Recorder {
   /// it.
   Future<void> close() async {
     await _serially(() async {
+      ++_segmentGeneration;
       await _subscription?.cancel();
       _subscription = null;
     });
@@ -283,20 +285,29 @@ class Recorder {
   }
 
   void _openSegment(JourneyRow journey, DateTime startedAt) {
+    final generation = ++_segmentGeneration;
     _filter!.startSegment();
     _stats!.startSegment();
     _openSince = startedAt;
     _subscription = _location
         .watch(journey.mode)
         .listen(
-          (fix) => _serially(() => _record(journey.id, fix)),
-          onError: (Object problem) =>
-              _serially(() async => _locationLost(journey.id, problem)),
+          (fix) => _serially(() async {
+            if (generation == _segmentGeneration) {
+              await _record(journey.id, fix);
+            }
+          }),
+          onError: (Object problem) => _serially(() async {
+            if (generation == _segmentGeneration) {
+              _locationLost(journey.id, problem);
+            }
+          }),
         );
     _set(Recording(journey: journey, progress: _progress()));
   }
 
   Future<void> _closeSegment(DateTime at) async {
+    ++_segmentGeneration;
     await _subscription?.cancel();
     _subscription = null;
     final since = _openSince;

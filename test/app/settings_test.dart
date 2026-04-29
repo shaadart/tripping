@@ -45,6 +45,27 @@ void main() {
     expect((await Settings.open(file)).name.value, 'Asha Rao');
   });
 
+  test(
+    'sharing-only pause survives reopen without changing other settings',
+    () async {
+      final settings = await Settings.open(file);
+      await Future.wait([
+        settings.setName('Ravi'),
+        settings.setSharingPaused('fictional-journey', true),
+        settings.setHighSun(true),
+      ]);
+      final reopened = await Settings.open(file);
+      expect(reopened.sharingPaused('fictional-journey'), isTrue);
+      expect(reopened.name.value, 'Ravi');
+      expect(reopened.highSun.value, isTrue);
+      await reopened.setSharingPaused('fictional-journey', false);
+      expect(
+        (await Settings.open(file)).sharingPaused('fictional-journey'),
+        isFalse,
+      );
+    },
+  );
+
   test('an unreadable file means the defaults, not a failed start', () async {
     file.writeAsStringSync('{not json');
     expect((await Settings.open(file)).highSun.value, isFalse);

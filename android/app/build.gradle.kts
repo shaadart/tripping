@@ -69,3 +69,11 @@ flutter {
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
+
+// Same OpenGL SDK used by maplibre_gl; exposes its supported connectivity
+// switch so a paused journey cannot keep retrying tile requests.
+dependencies {
+    implementation("org.maplibre.gl:android-sdk-opengl:13.5.0")
+    // Same SDK version already used by firebase_auth; public user-transfer API.
+    implementation("com.google.firebase:firebase-auth:25.0.0")
+}

@@ -70,9 +70,12 @@ abstract interface class RouteSource {
 /// instance allows at most one request a second and asks apps not to bake
 /// its address in, so the address is a build setting and requests are
 /// spaced.
-class ValhallaRouter implements RouteSource {
-  ValhallaRouter({this.baseUrl = defaultUrl, Fetch? fetch})
-    : _fetch = fetch ?? httpGet;
+abstract interface class CancellableRouteSource implements RouteSource {
+  void cancelPending();
+}
+
+class ValhallaRouter implements CancellableRouteSource {
+  ValhallaRouter({this.baseUrl = defaultUrl, Fetch? fetch}) : _fetch = fetch;
 
   static const defaultUrl = String.fromEnvironment(
     'TRIPPING_ROUTING_URL',
@@ -83,7 +86,14 @@ class ValhallaRouter implements RouteSource {
   static DateTime? _lastRequest;
 
   final String baseUrl;
-  final Fetch _fetch;
+  final Fetch? _fetch;
+  var _cancellation = RequestCancellation();
+
+  @override
+  void cancelPending() {
+    _cancellation.cancel();
+    _cancellation = RequestCancellation();
+  }
 
   @override
   Future<PlannedRoute> route(
@@ -92,10 +102,12 @@ class ValhallaRouter implements RouteSource {
     JourneyMode mode, {
     required DateTime at,
   }) async {
+    final cancellation = _cancellation;
+    cancellation.check();
     final last = _lastRequest;
     if (last != null) {
       final wait = _spacing - DateTime.now().difference(last);
-      if (wait > Duration.zero) await Future<void>.delayed(wait);
+      if (wait > Duration.zero) await cancellation.delay(wait);
     }
     _lastRequest = DateTime.now();
     final request = jsonEncode({
@@ -112,9 +124,13 @@ class ValhallaRouter implements RouteSource {
     });
     final HttpAnswer answer;
     try {
-      answer = await _fetch(
-        Uri.parse('$baseUrl/route').replace(queryParameters: {'json': request}),
-      );
+      final uri = Uri.parse(
+        '$baseUrl/route',
+      ).replace(queryParameters: {'json': request});
+      answer = await (_fetch == null
+          ? httpGet(uri, cancellation: cancellation)
+          : _fetch(uri));
+      cancellation.check();
     } on NoConnection {
       throw const RouteError(
         'No road route without a connection.',

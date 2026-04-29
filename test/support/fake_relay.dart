@@ -15,6 +15,15 @@ class FakeRelay implements Relay, RelayRoom {
   var closed = 0;
   RelayUnavailable? unavailable;
 
+  int suspensions = 0;
+  int resumptions = 0;
+
+  @override
+  Future<void> resume() async => resumptions++;
+
+  @override
+  Future<void> suspend() async => suspensions++;
+
   @override
   Future<String> me() async => 'me';
 
