@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../app/theme.dart';
+import '../app/identity_marker.dart';
 import '../journey/journey.dart';
 import 'map_tiles.dart';
 import 'track_geometry.dart';
@@ -140,34 +141,23 @@ Future<void> addCompanionLayers(
   String source,
 ) async {
   final scheme = Theme.of(context).colorScheme;
-  final moss = scheme.tertiary.toHexStringRGB();
-  await map.addCircleLayer(
+  await map.addSymbolLayer(
     source,
-    '$source-dots',
-    CircleLayerProperties(
-      circleRadius: 7,
-      circleColor: [
-        'match',
-        ['get', 'freshness'],
-        'stale',
-        'rgba(0,0,0,0)',
-        moss,
-      ],
-      circleOpacity: [
+    '$source-markers',
+    SymbolLayerProperties(
+      iconImage: ['get', 'marker'],
+      iconSize: identityMapIconScale(context),
+      iconOpacity: [
         'match',
         ['get', 'freshness'],
         'aging',
         0.55,
         1,
       ],
-      circleStrokeColor: [
-        'match',
-        ['get', 'freshness'],
-        'stale',
-        '#8A8378',
-        '#FFFFFF',
-      ],
-      circleStrokeWidth: 3,
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+      iconPitchAlignment: 'viewport',
+      iconRotationAlignment: 'viewport',
     ),
   );
   await map.addSymbolLayer(
@@ -177,7 +167,7 @@ Future<void> addCompanionLayers(
       textField: ['get', 'label'],
       textFont: ['Noto Sans Regular'],
       textSize: 12,
-      textOffset: [0, 1.2],
+      textOffset: [0, 2.0],
       textAnchor: 'top',
       textColor: scheme.onSurface.toHexStringRGB(),
       textHaloColor: scheme.surface.toHexStringRGB(),

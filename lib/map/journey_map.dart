@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../app/theme.dart';
+import '../app/identity_marker.dart';
+import '../group/identity.dart';
 import '../group/group_sync.dart';
 import '../journey/geo.dart';
 import '../journey/journey.dart';
@@ -66,8 +68,10 @@ class JourneyMap extends StatefulWidget {
     required this.now,
     this.planner,
     this.group,
+    this.identity = const MapIdentity(),
   });
 
+  final MapIdentity identity;
   final RecorderState state;
   final JourneyStore store;
   final DateTime now;
@@ -93,6 +97,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
 
   /// The companions last drawn, to skip redrawing what has not changed.
   String? _companionsDrawn;
+  final _markerImages = <String>{};
 
   MapLibreMapController? _map;
   bool _styleReady = false;
@@ -165,8 +170,9 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   void _onStyleLoaded() {
     _serially(() async {
       final map = _map!;
+      final iconScale = identityMapIconScale(context);
+      _markerImages.clear();
       final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
-      final stale = warningColor(context).toHexStringRGB();
       final line = trackLine(context);
       // The planned way first, so the track drawn on top shows where the
       // journey really went.
@@ -203,24 +209,16 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
           circlePitchAlignment: 'map',
         ),
       );
-      await map.addCircleLayer(
+      await map.addSymbolLayer(
         _positionSource,
         'puck',
-        CircleLayerProperties(
-          circleRadius: 8,
-          circleColor: [
-            'case',
-            ['get', 'hollow'],
-            'rgba(0,0,0,0)',
-            ember,
-          ],
-          circleStrokeColor: [
-            'case',
-            ['get', 'stale'],
-            stale,
-            '#FFFFFF',
-          ],
-          circleStrokeWidth: 3,
+        SymbolLayerProperties(
+          iconImage: ['get', 'marker'],
+          iconSize: iconScale,
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+          iconPitchAlignment: 'viewport',
+          iconRotationAlignment: 'viewport',
         ),
       );
       _styleReady = true;
@@ -236,6 +234,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   Future<void> _sync() async {
     final map = _map;
     if (!_visible || map == null || !_styleReady) return;
+    await _ensureMarker(map, widget.identity);
     await _drawCompanions(map);
     final state = widget.state;
     final (journey, progress) = switch (state) {
@@ -324,6 +323,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
         fix,
         stale: stale,
         maxAccuracy: TrackPolicy.of(mode).maxAccuracy,
+        identity: widget.identity,
       ),
     );
     if (fix == null || identical(fix, _shownFix)) return;
@@ -423,6 +423,9 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   /// second, but a label only each minute).
   Future<void> _drawCompanions(MapLibreMapController map) async {
     final status = widget.group?.value;
+    for (final companion in status?.companions ?? <Companion>[]) {
+      await _ensureMarker(map, companion.shared.identity);
+    }
     final features = companionFeatures(
       status == null || status.ended ? const [] : status.companions,
       widget.now,
@@ -432,6 +435,20 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
     if (drawn == _companionsDrawn) return;
     _companionsDrawn = drawn;
     await map.setGeoJsonSource(_companionSource, features);
+  }
+
+  Future<void> _ensureMarker(
+    MapLibreMapController map,
+    MapIdentity identity,
+  ) async {
+    for (final hollow in [false, true]) {
+      final key = identityMarkerKey(identity, hollow: hollow);
+      if (_markerImages.contains(key)) continue;
+      final bytes = await identityMarkerPng(identity, hollow: hollow);
+      if (!mounted) return;
+      await map.addImage(key, bytes);
+      _markerImages.add(key);
+    }
   }
 
   /// Terrain-forward on an expedition, quieter on the road (D2).

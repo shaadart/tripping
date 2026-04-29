@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'identity.dart';
 
 /// An invitation to a group (G1): which group, the secret that lets its
 /// holder join, and who invited.
@@ -12,11 +13,24 @@ class Invite {
     required this.groupId,
     required this.secret,
     required this.hostName,
+    this.colour = IdentityColour.clay,
+    this.shape = MarkerShape.tablet,
   });
 
   /// A new group for the journey [groupId], with a fresh 128-bit secret.
-  factory Invite.create(String groupId, String hostName, {Random? random}) =>
-      Invite(groupId: groupId, secret: newSecret(random), hostName: hostName);
+  factory Invite.create(
+    String groupId,
+    String hostName, {
+    Random? random,
+    IdentityColour colour = IdentityColour.clay,
+    MarkerShape shape = MarkerShape.tablet,
+  }) => Invite(
+    groupId: groupId,
+    secret: newSecret(random),
+    hostName: hostName,
+    colour: colour,
+    shape: shape,
+  );
 
   /// The inviting journey's uuid.
   final String groupId;
@@ -26,13 +40,17 @@ class Invite {
 
   /// How the inviter named themselves.
   final String hostName;
+  final IdentityColour colour;
+  final MarkerShape shape;
+  MapIdentity get identity =>
+      MapIdentity(name: hostName, colour: colour, shape: shape);
 
   static const scheme = 'tripping';
   static const host = 'invite';
   static const path = '/join';
 
   /// Names are cut to this many characters.
-  static const nameLength = 40;
+  static const nameLength = MapIdentity.nameLength;
 
   /// `tripping://invite/join?g=…&k=…&n=…`: opens Tripping when tapped or
   /// scanned, and survives being pasted inside a message.
@@ -40,7 +58,13 @@ class Invite {
     scheme: scheme,
     host: host,
     path: path,
-    queryParameters: {'g': groupId, 'k': secret, 'n': hostName},
+    queryParameters: {
+      'g': groupId,
+      'k': secret,
+      'n': hostName,
+      if (colour != IdentityColour.clay) 'c': colour.name,
+      if (shape != MarkerShape.tablet) 'h': shape.name,
+    },
   ).toString();
 
   static final _found = RegExp(r'tripping://invite/join\?\S+');
@@ -73,14 +97,19 @@ class Invite {
     if (!_uuid.hasMatch(groupId) || !isSecret(secret) || name.isEmpty) {
       return null;
     }
-    return Invite(groupId: groupId, secret: secret, hostName: name);
+    return Invite(
+      groupId: groupId,
+      secret: secret,
+      hostName: name,
+      colour: IdentityColour.parse(uri.queryParameters['c']),
+      shape: MarkerShape.parse(uri.queryParameters['h']),
+    );
   }
 
   /// A name as shown to others: one line, trimmed, at most [nameLength]
   /// characters.
   static String cleanName(String name) {
-    final line = name.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return line.length <= nameLength ? line : line.substring(0, nameLength);
+    return MapIdentity.cleanName(name);
   }
 
   /// Whether [text] is a 128-bit secret as made by [newSecret].
@@ -98,10 +127,12 @@ class Invite {
       other is Invite &&
       other.groupId == groupId &&
       other.secret == secret &&
-      other.hostName == hostName;
+      other.hostName == hostName &&
+      other.colour == colour &&
+      other.shape == shape;
 
   @override
-  int get hashCode => Object.hash(groupId, secret, hostName);
+  int get hashCode => Object.hash(groupId, secret, hostName, colour, shape);
 }
 
 /// 128 random bits from a secure source, as 22 characters of base64url.

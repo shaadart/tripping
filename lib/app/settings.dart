@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../group/invite.dart';
+import '../group/identity.dart';
 
 /// The few preferences Tripping keeps, in a small JSON file next to the
 /// journeys, with this install's identity in groups. Never location data.
@@ -14,11 +15,23 @@ class Settings {
     String? tileRelease,
     String? participantId,
     String? name,
+    IdentityColour colour = IdentityColour.clay,
+    MarkerShape shape = MarkerShape.tablet,
+    bool identityReady = false,
     Set<String> sharingPaused = const {},
   }) : highSun = ValueNotifier(highSun),
        tileRelease = ValueNotifier(tileRelease),
        _participantId = participantId,
        name = ValueNotifier(name),
+       identity = ValueNotifier(
+         MapIdentity(name: name ?? 'Traveller', colour: colour, shape: shape),
+       ),
+       _savedIdentity = MapIdentity(
+         name: name ?? 'Traveller',
+         colour: colour,
+         shape: shape,
+       ),
+       _identityReady = identityReady,
        _sharingPaused = sharingPaused;
 
   /// Reads [file]; a missing or unreadable file means the defaults.
@@ -27,10 +40,18 @@ class Settings {
     String? tileRelease;
     String? participantId;
     String? name;
+    var colour = IdentityColour.clay;
+    var shape = MarkerShape.tablet;
+    bool? identityReady;
     var sharingPaused = <String>{};
     try {
       final json = jsonDecode(await file.readAsString());
       if (json is Map) {
+        colour = IdentityColour.parse(json['identityColour']);
+        shape = MarkerShape.parse(json['identityShape']);
+        if (json['identityReady'] is bool) {
+          identityReady = json['identityReady'] as bool;
+        }
         if (json['sharingPaused'] case final List<Object?> paused) {
           sharingPaused = paused.whereType<String>().toSet();
         }
@@ -56,6 +77,9 @@ class Settings {
       tileRelease: tileRelease,
       participantId: participantId,
       name: name,
+      colour: colour,
+      shape: shape,
+      identityReady: identityReady ?? name != null,
       sharingPaused: sharingPaused,
     );
   }
@@ -71,6 +95,10 @@ class Settings {
   /// How this phone's user appears to companions; asked once, on first
   /// inviting or joining.
   final ValueNotifier<String?> name;
+  final ValueNotifier<MapIdentity> identity;
+  MapIdentity _savedIdentity;
+  bool _identityReady;
+  bool get identityReady => _identityReady;
 
   String? _participantId;
   final Set<String> _sharingPaused;
@@ -99,8 +127,24 @@ class Settings {
   }
 
   Future<void> setName(String value) async {
-    name.value = Invite.cleanName(value);
-    await _save();
+    await setIdentity(
+      MapIdentity(
+        name: value,
+        colour: identity.value.colour,
+        shape: identity.value.shape,
+      ),
+    );
+  }
+
+  Future<void> setIdentity(MapIdentity value) async {
+    final clean = MapIdentity(
+      name: value.displayName,
+      colour: value.colour,
+      shape: value.shape,
+    );
+    await _save(identityOverride: clean);
+    name.value = clean.name;
+    identity.value = clean;
   }
 
   Future<void> setHighSun(bool on) async {
@@ -113,13 +157,13 @@ class Settings {
     await _save();
   }
 
-  Future<void> _save() {
-    final result = _writes.then((_) => _write());
+  Future<void> _save({MapIdentity? identityOverride}) {
+    final result = _writes.then((_) => _write(identityOverride));
     _writes = result.catchError((Object _) {});
     return result;
   }
 
-  Future<void> _write() async {
+  Future<void> _write(MapIdentity? identityOverride) async {
     // Written beside and renamed over, so a crash never leaves half a file.
     final next = File('${_file.path}.next');
     await next.writeAsString(
@@ -128,10 +172,18 @@ class Settings {
         if (_sharingPaused.isNotEmpty) 'sharingPaused': _sharingPaused.toList(),
         'tileRelease': ?tileRelease.value,
         'participantId': ?_participantId,
-        'name': ?name.value,
+        if (identityOverride != null || name.value != null || _identityReady)
+          'name': (identityOverride ?? _savedIdentity).name,
+        'identityColour': (identityOverride ?? _savedIdentity).colour.name,
+        'identityShape': (identityOverride ?? _savedIdentity).shape.name,
+        'identityReady': identityOverride != null || _identityReady,
       }),
       flush: true,
     );
     await next.rename(_file.path);
+    if (identityOverride != null) {
+      _savedIdentity = identityOverride;
+      _identityReady = true;
+    }
   }
 }

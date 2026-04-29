@@ -1,5 +1,6 @@
 import '../journey/geo.dart';
 import '../journey/journey.dart';
+import 'identity.dart';
 
 /// Where this phone's journey stands, as the group sees it.
 enum JourneyPhase { recording, paused, ended }
@@ -14,9 +15,15 @@ class Shared {
     required this.mode,
     this.fix,
     this.fixAge,
+    this.colour = IdentityColour.clay,
+    this.shape = MarkerShape.tablet,
   });
 
   final String name;
+  final IdentityColour colour;
+  final MarkerShape shape;
+  MapIdentity get identity =>
+      MapIdentity(name: name, colour: colour, shape: shape);
   final JourneyPhase phase;
   final JourneyMode mode;
   final Fix? fix;
@@ -31,6 +38,8 @@ class Shared {
   /// name.
   Map<String, Object?> toMessage({DateTime? at}) => {
     'n': name,
+    if (colour != IdentityColour.clay) 'c': colour.name,
+    if (shape != MarkerShape.tablet) 'h': shape.name,
     's': phase.name[0],
     'm': mode.name[0],
     if (fix case final fix?)
@@ -80,6 +89,8 @@ class Shared {
     final age = message['o'];
     return Shared(
       name: name,
+      colour: IdentityColour.parse(message['c']),
+      shape: MarkerShape.parse(message['h']),
       phase: phase,
       mode: mode,
       fix: fix,
@@ -125,6 +136,11 @@ class SharePolicy {
     if (since < atLeast) return false;
     if (now.phase != told.phase) return true;
     if (now.phase != JourneyPhase.recording) return false;
+    if (now.name != told.name ||
+        now.colour != told.colour ||
+        now.shape != told.shape) {
+      return true;
+    }
     if (since >= every) return true;
     final (a, b) = (now.fix, told.fix);
     if (a == null || b == null) return a != b;

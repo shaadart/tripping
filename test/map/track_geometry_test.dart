@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tripping/group/identity.dart';
 import 'package:tripping/group/group_sync.dart';
 import 'package:tripping/group/sharing.dart';
 import 'package:tripping/journey/journey.dart';
@@ -328,9 +329,27 @@ void main() {
     expect(
       [for (final f in features) (f as Map)['properties']],
       [
-        {'name': 'Asha', 'freshness': 'live', 'label': 'Asha'},
-        {'name': 'Ravi', 'freshness': 'aging', 'label': 'Ravi · 1 min'},
-        {'name': 'Meera', 'freshness': 'stale', 'label': 'Meera · 15 min'},
+        {
+          'name': 'Asha',
+          'freshness': 'live',
+          'label': 'Asha',
+          'marker': identityMarkerKey(const MapIdentity(name: 'Asha')),
+        },
+        {
+          'name': 'Ravi',
+          'freshness': 'aging',
+          'label': 'Ravi · 1 min',
+          'marker': identityMarkerKey(const MapIdentity(name: 'Ravi')),
+        },
+        {
+          'name': 'Meera',
+          'freshness': 'stale',
+          'label': 'Meera · 15 min',
+          'marker': identityMarkerKey(
+            const MapIdentity(name: 'Meera'),
+            hollow: true,
+          ),
+        },
       ],
     );
   });

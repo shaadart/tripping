@@ -12,6 +12,7 @@ import 'app/history_screen.dart';
 import 'app/offline_maps_screen.dart';
 import 'app/record_screen.dart';
 import 'app/settings.dart';
+import 'app/identity_screen.dart';
 import 'app/share_gpx.dart';
 import 'app/system_access.dart';
 import 'app/theme.dart';
@@ -117,7 +118,7 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
         );
       },
     );
-    return RecordScreen(
+    final screen = RecordScreen(
       recorder: recorder,
       location: location,
       system: const ChannelSystemAccess(),
@@ -131,6 +132,7 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
               now: now,
               planner: planner,
               group: group.status,
+              identity: settings.identity.value,
             ),
       places: PhotonSearch(),
       planner: planner,
@@ -163,6 +165,10 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
         );
       },
     );
+    // Never hide an existing paused/interrupted journey behind onboarding.
+    return recorder.state is Idle
+        ? IdentityGate(settings: settings, child: screen)
+        : screen;
   } catch (error) {
     return StartupFailure(error: error);
   }

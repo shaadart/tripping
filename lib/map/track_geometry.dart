@@ -5,6 +5,7 @@ import '../journey/journey_store.dart';
 import '../journey/simplify.dart';
 import '../group/group_sync.dart';
 import '../group/sharing.dart';
+import '../group/identity.dart';
 
 /// Metres per pixel at zoom 0 on the equator in MapLibre's 512-pixel world.
 const _metersPerPixelAtZoom0 = 2 * pi * 6378137 / 512;
@@ -61,6 +62,7 @@ Map<String, Object> positionFeatures(
   Fix? fix, {
   required bool stale,
   required double maxAccuracy,
+  MapIdentity identity = const MapIdentity(),
 }) {
   if (fix == null) return _collection(const []);
   final accuracy = fix.accuracy ?? maxAccuracy;
@@ -70,6 +72,10 @@ Map<String, Object> positionFeatures(
       'properties': {
         'radiusZ0': radiusAtZoom0(accuracy, fix.latitude),
         'hollow': stale || accuracy > maxAccuracy,
+        'marker': identityMarkerKey(
+          identity,
+          hollow: stale || accuracy > maxAccuracy,
+        ),
         'stale': stale,
       },
       'geometry': {
@@ -298,6 +304,10 @@ Map<String, Object> companionFeatures(
           'type': 'Feature',
           'properties': {
             'name': companion.name,
+            'marker': identityMarkerKey(
+              companion.shared.identity,
+              hollow: freshness == Freshness.stale,
+            ),
             'freshness': freshness.name,
             'label': freshness == Freshness.live
                 ? companion.name

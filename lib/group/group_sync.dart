@@ -325,6 +325,8 @@ class GroupSync {
     if (mine != null) {
       _mine = Shared(
         name: mine.name,
+        colour: mine.colour,
+        shape: mine.shape,
         phase: JourneyPhase.ended,
         mode: mine.mode,
         fix: mine.fix,

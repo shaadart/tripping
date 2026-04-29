@@ -9,6 +9,8 @@ import 'package:share_plus/share_plus.dart';
 import '../group/invite.dart';
 import '../journey/journey.dart';
 import 'settings.dart';
+import 'identity_screen.dart';
+import 'identity_marker.dart';
 
 /// Says, in one place, what joining a group means (D-037): joining is the
 /// choice to share; pausing leaves the last point; ending the journey or
@@ -24,58 +26,10 @@ const groupNote =
 Future<String?> nameForGroups(BuildContext context, Settings settings) async {
   final saved = settings.name.value;
   if (saved != null && saved.isNotEmpty) return saved;
-  final name = await showDialog<String>(
-    context: context,
-    builder: (_) => const _NameDialog(),
+  final savedIdentity = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(builder: (_) => IdentityScreen(settings: settings)),
   );
-  final clean = Invite.cleanName(name ?? '');
-  if (clean.isEmpty) return null;
-  await settings.setName(clean);
-  return clean;
-}
-
-/// Asks for the name; owns its field, so it outlives the closing animation.
-class _NameDialog extends StatefulWidget {
-  const _NameDialog();
-
-  @override
-  State<_NameDialog> createState() => _NameDialogState();
-}
-
-class _NameDialogState extends State<_NameDialog> {
-  final _field = TextEditingController();
-
-  @override
-  void dispose() {
-    _field.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Your name for groups'),
-    content: TextField(
-      controller: _field,
-      autofocus: true,
-      maxLength: Invite.nameLength,
-      textCapitalization: TextCapitalization.words,
-      decoration: const InputDecoration(
-        hintText: 'e.g. Asha',
-        helperText: 'Companions see it with your position.',
-      ),
-      onSubmitted: (value) => Navigator.pop(context, value),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      TextButton(
-        onPressed: () => Navigator.pop(context, _field.text),
-        child: const Text('Save'),
-      ),
-    ],
-  );
+  return savedIdentity == true ? settings.name.value : null;
 }
 
 /// Shows the invitation to the group as a QR code and a shareable link.
@@ -100,6 +54,19 @@ class InviteScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          Row(
+            children: [
+              IdentityMarker(identity: invite.identity),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${invite.hostName} · ${invite.colour.label} · ${invite.shape.label}',
+                  style: text.titleMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           Center(
             // Dark on white whatever the look: scanners need the contrast.
             child: Container(
@@ -223,6 +190,13 @@ class _JoinScreenState extends State<JoinScreen> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          if (invite != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IdentityMarker(identity: invite.identity, size: 64),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (invite == null) ...[
             Text(
               'Scan the invite code on a companion\'s phone, or paste the '

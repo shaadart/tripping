@@ -126,9 +126,10 @@ void main() {
   }
 
   Future<void> giveName(WidgetTester tester, String name) async {
-    expect(find.text('Your name for groups'), findsOneWidget);
+    expect(find.text('Your map identity'), findsOneWidget);
     await tester.enterText(find.byType(TextField), name);
-    await tester.tap(find.text('Save'));
+    await tester.ensureVisible(find.text('Save identity'));
+    await tester.tap(find.text('Save identity'));
     await settle(tester);
   }
 
@@ -158,7 +159,12 @@ void main() {
     await giveName(tester, 'Asha');
     await settle(tester);
     expect(find.byType(QrImageView), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Positions are sealed'),
+      150,
+    );
     expect(find.textContaining('Positions are sealed'), findsOneWidget);
+    await tester.ensureVisible(find.text('Share invite link'));
     await tester.tap(find.text('Share invite link'));
     final journey = (recorder.state as Recording).journey;
     final first = Invite.find(shared.single)!;
@@ -176,7 +182,7 @@ void main() {
     await tester.tap(find.text('Invite'));
     await frames(tester);
     await settle(tester);
-    expect(find.text('Your name for groups'), findsNothing);
+    expect(find.text('Your map identity'), findsNothing);
     await tester.tap(find.text('Share invite link'));
     expect(Invite.find(shared.last), first);
     expect(settings.name.value, 'Asha');
@@ -433,6 +439,20 @@ void main() {
       await tapReal(tester, 'Pause');
       expect(recorder.state, isA<Paused>());
       expect(location.listening, isFalse);
+      expect(mapNetwork.last, isFalse);
+      final connectedBeforeEdit = relay.resumptions;
+      await tester.tap(find.byTooltip('Your map identity'));
+      await frames(tester);
+      await tester.enterText(find.byType(TextField), 'Ravi Mehta');
+      await tester.ensureVisible(find.text('Gate'));
+      await tester.tap(find.text('Gate'));
+      await tester.ensureVisible(find.text('Save identity'));
+      await tapReal(tester, 'Save identity');
+      expect(settings.identity.value.shape.name, 'gate');
+      expect(recorder.state, isA<Paused>());
+      expect(location.listening, isFalse);
+      expect(relay.resumptions, connectedBeforeEdit);
+      expect(relay.published, hasLength(sent));
       expect(mapNetwork.last, isFalse);
       await tester.ensureVisible(find.text('Resume'));
       await tapReal(tester, 'Resume');

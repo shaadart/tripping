@@ -22,11 +22,14 @@ import '../recording/track_policy.dart';
 import '../group/convoy.dart';
 import '../group/group_sync.dart';
 import '../group/invite.dart';
+import '../group/identity.dart';
 import '../group/sharing.dart';
 import 'figure.dart';
 import 'format.dart';
 import 'group_screens.dart';
 import 'settings.dart';
+import 'identity_screen.dart';
+import 'identity_marker.dart';
 import 'system_access.dart';
 import 'search_screen.dart';
 import 'theme.dart';
@@ -185,6 +188,7 @@ class _RecordScreenState extends State<RecordScreen>
   @override
   void initState() {
     super.initState();
+    widget.settings?.identity.addListener(_identityChanged);
     _changes = widget.recorder.changes.listen((state) {
       if (_visible) {
         setState(() => _state = state);
@@ -213,9 +217,16 @@ class _RecordScreenState extends State<RecordScreen>
     _takeLink();
   }
 
+  void _identityChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _share(_state);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.settings?.identity.removeListener(_identityChanged);
     _ticker?.cancel();
     unawaited(_changes.cancel());
     unawaited(_routeWatch?.cancel());
@@ -523,7 +534,9 @@ class _RecordScreenState extends State<RecordScreen>
     unawaited(group.follow(_membership));
     group.update(
       Shared(
-        name: widget.settings?.name.value ?? 'Companion',
+        name: widget.settings?.name.value ?? 'Traveller',
+        colour: widget.settings?.identity.value.colour ?? IdentityColour.clay,
+        shape: widget.settings?.identity.value.shape ?? MarkerShape.tablet,
         phase: phase,
         mode: journey.mode,
         fix: progress.lastFix,
@@ -660,7 +673,12 @@ class _RecordScreenState extends State<RecordScreen>
     await settings.participantId();
     var membership = await store.membershipOf(journey.id);
     if (membership == null) {
-      final made = Invite.create(journey.uuid, name);
+      final made = Invite.create(
+        journey.uuid,
+        name,
+        colour: settings.identity.value.colour,
+        shape: settings.identity.value.shape,
+      );
       await store.saveMembership(
         journey.id,
         groupId: made.groupId,
@@ -674,7 +692,9 @@ class _RecordScreenState extends State<RecordScreen>
     final invite = Invite(
       groupId: membership.groupId,
       secret: membership.secret,
-      hostName: membership.hostName ?? name,
+      hostName: name,
+      colour: settings.identity.value.colour,
+      shape: settings.identity.value.shape,
     );
     _open((_) => InviteScreen(invite: invite, share: widget.shareText));
   }
@@ -849,6 +869,20 @@ class _RecordScreenState extends State<RecordScreen>
                           : () => _mark(state),
                       icon: const Icon(Icons.flag_outlined),
                       label: const Text('Mark'),
+                    ),
+                  ),
+                if (widget.settings case final settings?)
+                  Positioned(
+                    top: 64,
+                    right: 16,
+                    child: SafeArea(
+                      bottom: false,
+                      child: _RoundButton(
+                        onPressed: () =>
+                            _open((_) => IdentityScreen(settings: settings)),
+                        icon: Icons.person_outline,
+                        tooltip: 'Your map identity',
+                      ),
                     ),
                   ),
                 Positioned(
@@ -1601,7 +1635,29 @@ class _GroupLine extends StatelessWidget {
     );
   }
 
-  Widget _companion(Companion companion, TextTheme text, TextStyle? muted) {
+  Widget _companion(Companion companion, TextTheme text, TextStyle? muted) =>
+      MergeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            IdentityMarker(
+              identity: companion.shared.identity,
+              hollow:
+                  companion.shared.phase != JourneyPhase.recording ||
+                  companion.positionAt == null ||
+                  freshnessOf(
+                        _atLeastZero(now.difference(companion.positionAt!)),
+                        companion.shared.mode,
+                      ) ==
+                      Freshness.stale,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _companionText(companion, text, muted)),
+          ],
+        ),
+      );
+
+  Widget _companionText(Companion companion, TextTheme text, TextStyle? muted) {
     final shared = companion.shared;
     final fix = shared.fix;
     final here = this.here;
