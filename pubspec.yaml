@@ -38,6 +38,9 @@ dependencies:
   path_provider: ^2.1.6
   maplibre_gl: ^0.27.1
   share_plus: ^13.3.1
+  firebase_core: ^5.1.0
+  firebase_auth: ^7.0.1
+  firebase_database: ^13.0.1
 
 dev_dependencies:
   flutter_test:

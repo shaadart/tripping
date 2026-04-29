@@ -28,6 +28,7 @@ import 'recording/geolocator_location.dart';
 import 'recording/location_source.dart';
 import 'places/place_search.dart';
 import 'recording/raw_fix_log.dart';
+import 'relay/relay_spike.dart';
 import 'recording/recorder.dart';
 import 'routing/route_planner.dart';
 import 'routing/router.dart';
@@ -35,6 +36,14 @@ import 'routing/router.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (FrameStats.enabled) FrameStats.start();
+  // S1 test builds only; a failure must not keep the app from opening.
+  if (RelaySpike.enabled) {
+    unawaited(
+      RelaySpike.start().catchError(
+        (Object error) => debugPrint('S1 start failed: $error'),
+      ),
+    );
+  }
   final highSun = ValueNotifier(false);
   runApp(TrippingApp(home: await _openHome(highSun), highSun: highSun));
 }

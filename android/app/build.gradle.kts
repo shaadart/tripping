@@ -25,9 +25,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
 
     defaultConfig {
         // Permanent once published (D-011).
@@ -57,6 +54,18 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 flutter {
     source = "../.."
+}
+
+// Firebase settings are per developer and kept out of the repository
+// (D-033); without them the app builds and simply has no relay.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
