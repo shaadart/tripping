@@ -8,6 +8,37 @@
           ".validate": "newData.hasChildren(['seq', 'sent', 'server', 'pad']) && newData.child('seq').isNumber() && newData.child('sent').isNumber() && newData.child('server').val() === now && newData.child('pad').isString() && newData.child('pad').val().length <= 256"
         }
       }
+    },
+    "rooms": {
+      "$room": {
+        "meta": {
+          ".read": "auth != null && root.child('rooms').child($room).child('members').child(auth.uid).exists()",
+          ".write": "auth != null && !data.exists() && newData.exists()",
+          ".validate": "newData.hasChildren(['created']) && newData.child('created').val() === now",
+          "created": { ".validate": true },
+          "$other": { ".validate": false }
+        },
+        "members": {
+          ".read": "auth != null && data.child(auth.uid).exists()",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (!newData.exists() || root.child('rooms').child($room).child('meta').exists())",
+            ".validate": "newData.hasChildren(['joined']) && newData.child('joined').val() === now",
+            "joined": { ".validate": true },
+            "$other": { ".validate": false }
+          }
+        },
+        "presence": {
+          ".read": "auth != null && root.child('rooms').child($room).child('members').child(auth.uid).exists()",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (root.child('rooms').child($room).child('members').child(auth.uid).exists() && (!data.exists() || now - data.child('at').val() >= 2000)))",
+            ".validate": "newData.hasChildren(['seq', 'at', 'box']) && newData.child('seq').isNumber() && newData.child('at').val() === now && newData.child('box').isString() && newData.child('box').val().length <= 1024",
+            "seq": { ".validate": true },
+            "at": { ".validate": true },
+            "box": { ".validate": true },
+            "$other": { ".validate": false }
+          }
+        }
+      }
     }
   }
 }

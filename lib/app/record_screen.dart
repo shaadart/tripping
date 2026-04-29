@@ -19,6 +19,7 @@ import '../recording/course.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
+import '../group/group_sync.dart';
 import '../group/invite.dart';
 import 'figure.dart';
 import 'format.dart';
@@ -62,6 +63,7 @@ class RecordScreen extends StatefulWidget {
     this.places,
     this.planner,
     this.settings,
+    this.group,
     this.scannerBuilder,
     this.shareText,
     this.onToggleHighSun,
@@ -96,6 +98,9 @@ class RecordScreen extends StatefulWidget {
   /// The user's name and participant id; with [waypoints] (the store),
   /// enables groups.
   final Settings? settings;
+
+  /// Keeps this phone present in its journey's group (G2).
+  final GroupSync? group;
 
   /// Builds the invite-code scanner; injected so tests need no camera.
   final WidgetBuilder? scannerBuilder;
@@ -424,12 +429,19 @@ class _RecordScreenState extends State<RecordScreen>
     unawaited(_groupWatch?.cancel());
     _groupWatch = null;
     _membership = null;
+    unawaited(widget.group?.follow(null, ''));
     if (journey == null) return;
     final join = _pendingJoin;
     _pendingJoin = null;
     if (join != null) unawaited(_saveJoin(journey, join));
     _groupWatch = store.watchMembership(journey.id).listen((membership) {
       if (mounted) setState(() => _membership = membership);
+      unawaited(
+        widget.group?.follow(
+          membership,
+          widget.settings?.name.value ?? 'Companion',
+        ),
+      );
     });
   }
 
@@ -773,6 +785,8 @@ class _RecordScreenState extends State<RecordScreen>
                       if (_groups && state is! Idle)
                         _GroupLine(
                           membership: _membership,
+                          status: widget.group?.status,
+                          now: now,
                           onInvite: _invite,
                           onJoin: _join,
                         ),
@@ -1272,16 +1286,21 @@ class _DestinationLine extends StatelessWidget {
   }
 }
 
-/// The journey's group, in plain words: in one or not, and never more
-/// connected than it is (G1 forms groups; nothing is shared yet).
+/// The journey's group, in plain words: reachable or not, and who was
+/// heard how long ago. Never more: hearing from someone is not knowing
+/// where they are (positions come in G3).
 class _GroupLine extends StatelessWidget {
   const _GroupLine({
     required this.membership,
+    required this.status,
+    required this.now,
     required this.onInvite,
     required this.onJoin,
   });
 
   final MembershipRow? membership;
+  final ValueListenable<GroupStatus?>? status;
+  final DateTime now;
   final VoidCallback onInvite;
   final VoidCallback onJoin;
 
@@ -1302,35 +1321,61 @@ class _GroupLine extends StatelessWidget {
     }
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    final muted = text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant);
     final host = membership.hostName;
+    final title = switch (membership.role) {
+      GroupRole.creator => 'Your group',
+      GroupRole.member => "In ${host ?? 'a'}'s group",
+    };
+    Widget body(GroupStatus? status) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: text.titleMedium),
+        Text(switch (status) {
+          null => 'Not connected: positions are not shared',
+          GroupStatus(:final problem?) => problem,
+          GroupStatus(connected: false) =>
+            "Not connected: the group can't hear from this phone",
+          GroupStatus(connected: true) =>
+            'Connected to the group · positions are not shared yet',
+        }, style: muted),
+        if (status != null) ...[
+          for (final companion in status.companions)
+            Text(
+              '${companion.name} · heard '
+              '${age(_atLeastZero(now.difference(companion.heardAt)))} ago',
+              style: text.bodyMedium,
+            ),
+          if (status.connected && status.heard && status.companions.isEmpty)
+            Text('No one else has joined yet', style: muted),
+        ],
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.group_outlined, color: scheme.secondary),
           const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(switch (membership.role) {
-                  GroupRole.creator => 'Your group',
-                  GroupRole.member => "In ${host ?? 'a'}'s group",
-                }, style: text.titleMedium),
-                Text(
-                  'Not connected yet: positions are not shared',
-                  style: text.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+            child: switch (status) {
+              final status? => ValueListenableBuilder(
+                valueListenable: status,
+                builder: (context, value, _) => body(value),
+              ),
+              null => body(null),
+            },
           ),
           TextButton(onPressed: onInvite, child: const Text('Invite')),
         ],
       ),
     );
   }
+
+  /// Clocks disagree by a little; an age is never negative.
+  static Duration _atLeastZero(Duration age) =>
+      age.isNegative ? Duration.zero : age;
 }
 
 class _DestinationCard extends StatelessWidget {

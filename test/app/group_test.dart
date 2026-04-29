@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
@@ -9,11 +10,15 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:tripping/app/record_screen.dart';
 import 'package:tripping/app/settings.dart';
 import 'package:tripping/app/theme.dart';
+import 'package:tripping/group/group_keys.dart';
+import 'package:tripping/group/group_sync.dart';
 import 'package:tripping/group/invite.dart';
+import 'package:tripping/group/relay.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
 import 'package:tripping/recording/recorder.dart';
 
+import '../support/fake_relay.dart';
 import '../support/fakes.dart';
 
 const hostGroup = '0192f5a4-3b1c-7d2e-8f00-123456789abc';
@@ -28,6 +33,7 @@ void main() {
   late Directory dir;
   late List<String> shared;
   Invite? scanned;
+  GroupSync? group;
   final asha = Invite.create(hostGroup, 'Asha');
 
   setUp(() async {
@@ -38,6 +44,7 @@ void main() {
     settings = await Settings.open(File('${dir.path}/settings.json'));
     shared = [];
     scanned = null;
+    group = null;
   });
   tearDown(() => dir.deleteSync(recursive: true));
 
@@ -64,6 +71,7 @@ void main() {
           mapBuilder: (_, _) => const SizedBox.expand(),
           waypoints: store,
           settings: settings,
+          group: group,
           // Stands in for the camera: "sees" [scanned] at once.
           scannerBuilder: (context) => Scaffold(
             body: TextButton(
@@ -80,6 +88,9 @@ void main() {
   }
 
   Future<void> cleanUp(WidgetTester tester) async {
+    // It lives as long as the app; a test ends it (its timer at once).
+    unawaited(group?.stop());
+    await tester.pump();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
     await tester.runAsync(() async {
@@ -141,7 +152,7 @@ void main() {
     await giveName(tester, 'Asha');
     await settle(tester);
     expect(find.byType(QrImageView), findsOneWidget);
-    expect(find.textContaining('Not connected yet'), findsOneWidget);
+    expect(find.textContaining('Companions appear once'), findsOneWidget);
     await tester.tap(find.text('Share invite link'));
     final journey = (recorder.state as Recording).journey;
     final first = Invite.find(shared.single)!;
@@ -151,7 +162,7 @@ void main() {
     await frames(tester);
     expect(find.text('Your group'), findsOneWidget);
     expect(
-      find.text('Not connected yet: positions are not shared'),
+      find.text('Not connected: positions are not shared'),
       findsOneWidget,
     );
 
@@ -178,7 +189,7 @@ void main() {
     await tester.tap(find.text('Paste invite link'));
     await frames(tester);
     expect(find.text("Join Asha's group?"), findsOneWidget);
-    expect(find.textContaining('Not connected yet'), findsOneWidget);
+    expect(find.textContaining('even without a connection'), findsOneWidget);
 
     await tapReal(tester, 'Join and start an expedition');
     expect(recorder.state, isA<Recording>());
@@ -257,6 +268,63 @@ void main() {
     await tapReal(tester, 'Join with this journey');
     expect(find.text('That is your own group.'), findsOneWidget);
     expect(await tester.runAsync(() => store.membershipOf(journey.id)), isNull);
+    await cleanUp(tester);
+  });
+
+  testWidgets('reachable, and who was heard when: nothing more', (
+    tester,
+  ) async {
+    final relay = FakeRelay()..reachable = true;
+    group = GroupSync(relay);
+    await tester.runAsync(() => settings.setName('Ravi'));
+    await show(tester);
+    await act(tester, () async => tester.tap(find.text('Expedition')));
+    await act(tester, () async => location.emit(walkFix(0)));
+    final journey = (recorder.state as Recording).journey;
+    await tester.runAsync(
+      () => store.saveMembership(
+        journey.id,
+        groupId: asha.groupId,
+        secret: asha.secret,
+        role: GroupRole.member,
+        hostName: 'Asha',
+        at: t0,
+      ),
+    );
+    await settle(tester);
+    expect(
+      find.text('Connected to the group · positions are not shared yet'),
+      findsOneWidget,
+    );
+    expect(relay.published, hasLength(1), reason: 'said "here" on joining');
+
+    relay.changes.add([]);
+    await settle(tester);
+    expect(find.text('No one else has joined yet'), findsOneWidget);
+
+    // Asha's entry reached the relay 10 s before now, whose clock runs 2 s
+    // ahead of this phone's.
+    final keys = await tester.runAsync(() => GroupKeys.derive(asha.secret));
+    final box = await tester.runAsync(() => keys!.seal({'name': 'Asha'}, 'a'));
+    relay.changes.add([
+      RelayEntry(
+        participant: 'a',
+        seq: 3,
+        at: t0.subtract(const Duration(seconds: 10)),
+        box: box!,
+      ),
+    ]);
+    await settle(tester);
+    expect(find.text('Asha · heard 12 s ago'), findsOneWidget);
+
+    relay.reach(false);
+    await settle(tester);
+    expect(
+      find.text("Not connected: the group can't hear from this phone"),
+      findsOneWidget,
+    );
+    // Still said with its age, never as current.
+    expect(find.text('Asha · heard 12 s ago'), findsOneWidget);
     await cleanUp(tester);
   });
 }

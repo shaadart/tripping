@@ -27,6 +27,8 @@ import 'map/track_map.dart';
 import 'recording/geolocator_location.dart';
 import 'recording/location_source.dart';
 import 'places/place_search.dart';
+import 'group/firebase_relay.dart';
+import 'group/group_sync.dart';
 import 'recording/raw_fix_log.dart';
 import 'relay/relay_spike.dart';
 import 'recording/recorder.dart';
@@ -98,6 +100,7 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
       places: PhotonSearch(),
       planner: planner,
       settings: settings,
+      group: GroupSync(FirebaseRelay()),
       waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
       savedOffline: offline.saved,

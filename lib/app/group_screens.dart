@@ -10,11 +10,13 @@ import '../group/invite.dart';
 import '../journey/journey.dart';
 import 'settings.dart';
 
-/// Says, in one place, what a group is in this version: formed on each
-/// phone, not connected. A scan or a join is never shown as connectivity.
-const notConnectedYet =
-    'Not connected yet: this version forms the group on each phone. '
-    'Positions are not shared until group sharing arrives.';
+/// Says, in one place, what a group does in this version: membership is
+/// kept on the phone, companions appear once phones reach the relay, and
+/// positions are not shared yet. A scan or a join is never connectivity.
+const groupNote =
+    'Joining is saved on this phone, even without a connection. '
+    'Companions appear once your phones reach the group. Positions are not '
+    'shared yet.';
 
 /// The user's name for groups: the one saved, or asked for once. Null if
 /// they back out.
@@ -133,7 +135,7 @@ class InviteScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            notConnectedYet,
+            groupNote,
             style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
@@ -255,7 +257,7 @@ class _JoinScreenState extends State<JoinScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              notConnectedYet,
+              groupNote,
               style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 24),
