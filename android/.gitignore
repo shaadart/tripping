@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Firebase project settings (S1): per developer, kept out of the repository.
+app/google-services.json
