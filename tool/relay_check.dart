@@ -14,9 +14,10 @@ import 'src/firebase_rest.dart';
 Future<void> main() async {
   final fb = FirebaseRest.fromSettings();
   final random = Random.secure();
-  final room = base64Url
+  String roomName() => base64Url
       .encode([for (var i = 0; i < 16; i++) random.nextInt(256)])
       .replaceAll('=', '');
+  final room = roomName();
   final (a, aToken) = await fb.signUp(); // the inviter
   final (b, bToken) = await fb.signUp(); // a companion
   final (c, cToken) = await fb.signUp(); // someone without the room's name
@@ -170,55 +171,19 @@ Future<void> main() async {
     {'joined': FirebaseRest.now},
   );
 
-  // A second room, ended by its inviter (D-037).
-  final e = '${r}x';
-  await expect('another room', 'PUT', '$e/meta', aToken, 200, {
-    'created': FirebaseRest.now,
-    'by': a,
-  });
-  for (final (uid, token) in [(a, aToken), (b, bToken)]) {
-    await fb.call('PUT', fb.at('$e/members/$uid', token), {
-      'joined': FirebaseRest.now,
-    });
-  }
-  await expect('a member cannot end it', 'PATCH', '$e/meta', bToken, 401, {
+  // The inviter has no power to close the group (D-038). Legacy closed
+  // rooms are covered by the local emulator suite, which can seed them.
+  await expect('a member cannot close it', 'PATCH', '$r/meta', bToken, 401, {
     'closed': FirebaseRest.now,
   });
-  await expect('the inviter ends it', 'PATCH', '$e/meta', aToken, 200, {
+  await expect('the inviter cannot close it', 'PATCH', '$r/meta', aToken, 401, {
     'closed': FirebaseRest.now,
   });
-  await expect('it cannot be reopened', 'PUT', '$e/meta', aToken, 401, {
-    'created': FirebaseRest.now,
-    'by': a,
-  });
-  await expect(
-    'no presence in an ended group',
-    'PUT',
-    '$e/presence/$b',
-    bToken,
-    401,
-    presence,
-  );
-  await expect(
-    'no joining an ended group',
-    'PUT',
-    '$e/members/$c',
-    cToken,
-    401,
-    {'joined': FirebaseRest.now},
-  );
-  await expect(
-    'members still see that it ended',
-    'GET',
-    '$e/meta',
-    bToken,
-    200,
-  );
-  await expect('and can still leave', 'DELETE', '$e/members/$b', bToken, 200);
+  await expect('the old spike is denied', 'GET', 's1/test', aToken, 401);
 
   // Retention (G7): only day-old entries of others may be removed, and the
   // room only once no one is left.
-  final t = '${r}t';
+  final t = 'rooms/${roomName()}';
   await expect('a third room', 'PUT', '$t/meta', aToken, 200, {
     'created': FirebaseRest.now,
     'by': a,

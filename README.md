@@ -69,13 +69,22 @@ flutter run
 
 Recording and maps run without Firebase configuration. The group relay uses
 your project’s `android/app/google-services.json`, anonymous authentication
-and [Realtime Database rules](firebase/database.rules.json).
+and [Realtime Database rules](firebase/database.rules.json). Follow the
+[configuration guide](docs/CONFIGURATION.md) for a fresh checkout, optional
+Firebase and release signing. Placeholder examples contain no working
+credentials. Keep personal journeys and invitations outside Git; the
+[security notes](SECURITY.md) explain storage, group access and disclosure
+checks.
 
 Run the format, analysis and host-test checks before submitting a change:
 
 ```sh
 ./tool/check.sh
 ```
+
+The gate includes a Python 3.10+ disclosure check of the Git index and
+publication candidates, plus formatting, analysis and host tests. Host tests
+do not establish GPS, background, battery or native map behaviour on a phone.
 
 After changing [the database schema](lib/journey/schema.drift), regenerate:
 

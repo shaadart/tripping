@@ -1,19 +1,10 @@
 {
   "rules": {
-    "s1": {
-      "$room": {
-        ".read": "auth != null",
-        "$uid": {
-          ".write": "auth != null && auth.uid === $uid && (!data.exists() || now - data.child('server').val() >= 2000)",
-          ".validate": "newData.hasChildren(['seq', 'sent', 'server', 'pad']) && newData.child('seq').isNumber() && newData.child('sent').isNumber() && newData.child('server').val() === now && newData.child('pad').isString() && newData.child('pad').val().length <= 256"
-        }
-      }
-    },
     "rooms": {
       "$room": {
         "meta": {
           ".read": "auth != null && root.child('rooms').child($room).child('members').child(auth.uid).exists()",
-          ".write": "auth != null && ((newData.exists() && ((!data.exists() && newData.child('by').val() === auth.uid && newData.child('created').val() === now && !newData.hasChild('closed')) || (data.exists() && !data.hasChild('closed') && data.child('by').val() === auth.uid && newData.child('by').val() === data.child('by').val() && newData.child('created').val() === data.child('created').val() && newData.child('closed').val() === now))) || (!newData.exists() && !root.child('rooms').child($room).child('members').exists()))",
+          ".write": "auth != null && ((newData.exists() && !data.exists() && newData.child('by').val() === auth.uid && newData.child('created').val() === now && !newData.hasChild('closed')) || (!newData.exists() && !root.child('rooms').child($room).child('members').exists()))",
           ".validate": "newData.hasChildren(['created', 'by'])",
           "created": {
             ".validate": true
@@ -45,7 +36,7 @@
           ".read": "auth != null && root.child('rooms').child($room).child('members').child(auth.uid).exists()",
           "$uid": {
             ".write": "auth != null && ((auth.uid === $uid && (!newData.exists() || (root.child('rooms').child($room).child('members').child(auth.uid).exists() && !root.child('rooms').child($room).child('meta').hasChild('closed') && (!data.exists() || now - data.child('at').val() >= 2000)))) || (!newData.exists() && root.child('rooms').child($room).child('members').child(auth.uid).exists() && now - data.child('at').val() > 86400000))",
-            ".validate": "newData.hasChildren(['seq', 'at', 'box']) && newData.child('seq').isNumber() && newData.child('at').val() === now && newData.child('box').isString() && newData.child('box').val().length <= 1024",
+            ".validate": "newData.hasChildren(['seq', 'at', 'box']) && newData.child('seq').isNumber() && newData.child('seq').val() >= 1 && newData.child('seq').val() <= 9007199254740991 && newData.child('seq').val() % 1 === 0 && newData.child('at').val() === now && newData.child('box').isString() && newData.child('box').val().length >= 40 && newData.child('box').val().length <= 1024 && newData.child('box').val().matches(/^[A-Za-z0-9_-]+={0,2}$/)",
             "seq": {
               ".validate": true
             },
@@ -59,8 +50,11 @@
               ".validate": false
             }
           }
-        }
+        },
+        ".validate": "$room.matches(/^[A-Za-z0-9_-]{22}$/)"
       }
-    }
+    },
+    ".read": false,
+    ".write": false
   }
 }

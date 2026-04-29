@@ -1,0 +1,6 @@
+# Copy to android/key.properties, chmod 600, and use your own private key.
+# This example contains placeholders only; never commit the populated file.
+storeFile=/absolute/path/outside/repository/upload.jks
+storePassword=REPLACE_WITH_KEYSTORE_PASSWORD
+keyAlias=upload
+keyPassword=REPLACE_WITH_KEY_PASSWORD

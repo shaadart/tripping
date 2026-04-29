@@ -3,6 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+python3 -m unittest discover -s tool -p 'test_*.py'
+python3 tool/disclosure_check.py
 dart format --output=none --set-exit-if-changed lib test integration_test
 flutter analyze
 flutter test

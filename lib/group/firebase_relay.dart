@@ -58,8 +58,12 @@ class FirebaseRelay implements Relay {
   }
 
   @override
-  Future<void> leaveRoom(String room) async =>
-      _leave(FirebaseDatabase.instance.ref('rooms/$room'), await me());
+  Future<void> leaveRoom(String room) async {
+    // Initialise Firebase before accessing its default database. Startup
+    // housekeeping can be the first operation after opening the app.
+    final uid = await me();
+    await _leave(FirebaseDatabase.instance.ref('rooms/$room'), uid);
+  }
 }
 
 /// Own entries out, then the room itself if no one is left; the rules
