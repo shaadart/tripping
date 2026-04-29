@@ -58,12 +58,7 @@ class InviteScreen extends StatelessWidget {
             children: [
               IdentityMarker(identity: invite.identity),
               const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '${invite.hostName} · ${invite.colour.label} · ${invite.shape.label}',
-                  style: text.titleMedium,
-                ),
-              ),
+              Expanded(child: Text(invite.hostName, style: text.titleMedium)),
             ],
           ),
           const SizedBox(height: 16),

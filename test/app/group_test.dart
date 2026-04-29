@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:tripping/app/record_screen.dart';
 import 'package:tripping/app/settings.dart';
+import 'package:tripping/app/identity_screen.dart';
 import 'package:tripping/app/theme.dart';
 import 'package:tripping/group/group_keys.dart';
 import 'package:tripping/group/group_sync.dart';
@@ -126,10 +127,10 @@ void main() {
   }
 
   Future<void> giveName(WidgetTester tester, String name) async {
-    expect(find.text('Your map identity'), findsOneWidget);
+    expect(find.byType(IdentityScreen), findsOneWidget);
     await tester.enterText(find.byType(TextField), name);
-    await tester.ensureVisible(find.text('Save identity'));
-    await tester.tap(find.text('Save identity'));
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
     await settle(tester);
   }
 
@@ -182,7 +183,7 @@ void main() {
     await tester.tap(find.text('Invite'));
     await frames(tester);
     await settle(tester);
-    expect(find.text('Your map identity'), findsNothing);
+    expect(find.byType(IdentityScreen), findsNothing);
     await tester.tap(find.text('Share invite link'));
     expect(Invite.find(shared.last), first);
     expect(settings.name.value, 'Asha');
@@ -444,10 +445,10 @@ void main() {
       await tester.tap(find.byTooltip('Your map identity'));
       await frames(tester);
       await tester.enterText(find.byType(TextField), 'Ravi Mehta');
-      await tester.ensureVisible(find.text('Gate'));
-      await tester.tap(find.text('Gate'));
-      await tester.ensureVisible(find.text('Save identity'));
-      await tapReal(tester, 'Save identity');
+      await tester.ensureVisible(find.byTooltip('Gate'));
+      await tester.tap(find.byTooltip('Gate'));
+      await tester.ensureVisible(find.text('Save'));
+      await tapReal(tester, 'Save');
       expect(settings.identity.value.shape.name, 'gate');
       expect(recorder.state, isA<Paused>());
       expect(location.listening, isFalse);

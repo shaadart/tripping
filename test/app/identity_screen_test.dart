@@ -36,14 +36,15 @@ void main() {
         ),
       );
       await tester.enterText(find.byType(TextField), 'Ravi Mehta');
-      await tester.tap(find.text('River'));
-      await tester.ensureVisible(find.text('Gate'));
-      await tester.tap(find.text('Gate'));
+      await tester.tap(find.byTooltip('River'));
+      await tester.ensureVisible(find.byTooltip('Gate'));
+      await tester.tap(find.byTooltip('Gate'));
       await tester.pumpAndSettle();
-      expect(find.text('River · Gate'), findsOneWidget);
-      await tester.ensureVisible(find.text('Let’s go'));
+      expect(find.text('River · Gate'), findsNothing);
+      expect(find.byType(IdentityMarker), findsNWidgets(5));
+      await tester.ensureVisible(find.text('Continue'));
       await tester.runAsync(() async {
-        await tester.tap(find.text('Let’s go'));
+        await tester.tap(find.text('Continue'));
         await Future<void>.delayed(const Duration(milliseconds: 100));
       });
       await tester.pumpAndSettle();
@@ -81,11 +82,11 @@ void main() {
           ),
         ),
       );
-      await tester.ensureVisible(find.text('Gate'));
+      await tester.ensureVisible(find.byTooltip('Gate'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(
-        tester.getSize(find.widgetWithText(FilledButton, 'Let’s go')).height,
+        tester.getSize(find.widgetWithText(FilledButton, 'Continue')).height,
         greaterThanOrEqualTo(48),
       );
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
@@ -109,9 +110,9 @@ void main() {
       ),
     );
     await tester.enterText(find.byType(TextField), 'Asha');
-    await tester.ensureVisible(find.text('Let’s go'));
+    await tester.ensureVisible(find.text('Continue'));
     await tester.runAsync(() async {
-      await tester.tap(find.text('Let’s go'));
+      await tester.tap(find.text('Continue'));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     await tester.pumpAndSettle();

@@ -18,17 +18,21 @@ class IdentityMarker extends StatelessWidget {
     required this.identity,
     this.size = 44,
     this.hollow = false,
+    this.showInitials = true,
   });
   final MapIdentity identity;
   final double size;
   final bool hollow;
+  final bool showInitials;
   @override
   Widget build(BuildContext context) => Semantics(
     image: true,
     label: '${identity.description}${hollow ? ', last known' : ''}',
     child: SizedBox.square(
       dimension: size,
-      child: CustomPaint(painter: _MarkerPainter(identity, hollow)),
+      child: CustomPaint(
+        painter: _MarkerPainter(identity, hollow, showInitials),
+      ),
     ),
   );
 }
@@ -53,9 +57,10 @@ Future<Uint8List> identityMarkerPng(
 }
 
 class _MarkerPainter extends CustomPainter {
-  const _MarkerPainter(this.identity, this.hollow);
+  const _MarkerPainter(this.identity, this.hollow, [this.showInitials = true]);
   final MapIdentity identity;
   final bool hollow;
+  final bool showInitials;
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
@@ -65,7 +70,7 @@ class _MarkerPainter extends CustomPainter {
       case MarkerShape.rosette:
         for (var i = 0; i < 16; i++) {
           final angle = -math.pi / 2 + i * math.pi / 8;
-          final radius = i.isEven ? 17.0 : 13.5;
+          final radius = i.isEven ? 17.0 : 15.0;
           final x = 22 + math.cos(angle) * radius;
           final y = 22 + math.sin(angle) * radius;
           if (i == 0) {
@@ -94,27 +99,12 @@ class _MarkerPainter extends CustomPainter {
         path.addRRect(
           RRect.fromRectAndRadius(
             const Rect.fromLTWH(8, 5, 28, 34),
-            const Radius.circular(13),
+            const Radius.circular(5),
           ),
         );
     }
-    // A dark outer keyline + white casing survives bright, dark and busy maps.
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0xFF26221E)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeJoin = StrokeJoin.round,
-    );
+    // One fine edge separates the solid mark from terrain without a badge
+    // outline, glow or decorative shadow.
     canvas.drawPath(
       path,
       Paint()
@@ -122,14 +112,17 @@ class _MarkerPainter extends CustomPainter {
             ? const Color(0xFFF6F1E7)
             : Color(identity.colour.argb),
     );
-    if (hollow) {
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0xFF625D55)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.3,
-      );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = hollow ? const Color(0xFF625D55) : const Color(0xF2FFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1
+        ..strokeJoin = StrokeJoin.round,
+    );
+    if (!showInitials) {
+      canvas.restore();
+      return;
     }
     final text = TextPainter(
       text: TextSpan(
@@ -137,7 +130,7 @@ class _MarkerPainter extends CustomPainter {
         style: TextStyle(
           color: hollow ? const Color(0xFF45413A) : Colors.white,
           fontSize: 13,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -160,5 +153,6 @@ class _MarkerPainter extends CustomPainter {
       identity.name != old.identity.name ||
       identity.colour != old.identity.colour ||
       identity.shape != old.identity.shape ||
-      hollow != old.hollow;
+      hollow != old.hollow ||
+      showInitials != old.showInitials;
 }
