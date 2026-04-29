@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 /// Identifies the app to every open service it uses, as their terms ask.
-const appUserAgent = 'Tripping/1.0 (Android; com.example.tripping)';
+const appUserAgent = 'Tripping/1.0 (Android; com.shaadart.tripping)';
 
 /// A server's answer: status and body.
 typedef HttpAnswer = ({int status, String body});

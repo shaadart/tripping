@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import '../app/settings.dart';
 import '../app/theme.dart';
+import '../net/http.dart';
 
 /// Which OpenFreeMap tile release the maps draw and download, and the style
 /// files that point at it.
@@ -26,7 +27,7 @@ class MapTiles {
   static const index = 'https://tiles.openfreemap.org/planet';
 
   /// Identifies the app to the tile server, as its terms ask.
-  static const userAgent = 'Tripping/1.0 (Android; com.example.tripping)';
+  static const userAgent = appUserAgent;
 
   final Directory _root;
   final Settings _settings;

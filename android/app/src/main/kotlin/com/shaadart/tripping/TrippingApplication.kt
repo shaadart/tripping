@@ -1,4 +1,4 @@
-package com.example.tripping
+package com.shaadart.tripping
 
 import android.app.Application
 import io.flutter.embedding.engine.FlutterEngine

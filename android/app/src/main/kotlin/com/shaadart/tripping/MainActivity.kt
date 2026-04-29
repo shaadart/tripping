@@ -1,4 +1,4 @@
-package com.example.tripping
+package com.shaadart.tripping
 
 import android.Manifest
 import android.app.ActivityManager
