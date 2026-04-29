@@ -137,6 +137,12 @@ void main() {
     expect(route.kind, isNull);
   });
 
+  test('a waypoint headed for is not kept among recent places', () async {
+    await planner.goTo(journey, park, remember: false);
+    expect(await planner.recent(), isEmpty);
+    expect((await store.routeOf(journey))!.destination, 'Lalbagh');
+  });
+
   test('chosen places are remembered; a bare map point is not', () async {
     router.answer = () async => road();
     await planner.goTo(journey, park);

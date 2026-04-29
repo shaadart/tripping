@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../journey/geo.dart';
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../map/offline_area.dart';
@@ -299,6 +300,19 @@ class _RecordScreenState extends State<RecordScreen>
     _planIfDue();
   }
 
+  /// On an expedition, the live fix the destination's direction is told
+  /// from; null on the road, or without a live fix.
+  static Fix? _compassFix(RecorderState state, DateTime now) => switch (state) {
+    Recording(
+      journey: JourneyRow(mode: JourneyMode.expedition),
+      :final latestFix?,
+      :final latestFixArrivedAt?,
+    )
+        when now.difference(latestFixArrivedAt) <= _quietAfter =>
+      latestFix,
+    _ => null,
+  };
+
   static RouteFollower? _followerFor(RouteRow? route) {
     final kind = route?.kind;
     final geometry = route?.geometry;
@@ -550,11 +564,18 @@ class _RecordScreenState extends State<RecordScreen>
                             ),
                           ),
                           _ => _DestinationLine(
+                            mode: switch (state) {
+                              Recording(:final journey) ||
+                              Paused(:final journey) ||
+                              Interrupted(:final journey) => journey.mode,
+                              Idle() => JourneyMode.road,
+                            },
                             route: _route,
                             why: _routeWhy,
                             planning: _planning,
                             progress: _progress,
                             now: now,
+                            here: _compassFix(state, now),
                             onSearch: _chooseDestination,
                             onClear: () {
                               final journey = _routeJourney;
@@ -921,16 +942,19 @@ class _NextDestination extends StatelessWidget {
 /// line says it is one.
 class _DestinationLine extends StatelessWidget {
   const _DestinationLine({
+    required this.mode,
     required this.route,
     required this.why,
     required this.planning,
     required this.progress,
     required this.now,
+    required this.here,
     required this.onSearch,
     required this.onClear,
     required this.onRetry,
   });
 
+  final JourneyMode mode;
   final RouteRow? route;
   final RouteError? why;
   final bool planning;
@@ -938,6 +962,10 @@ class _DestinationLine extends StatelessWidget {
   /// How far along the way, while recording with a live fix.
   final RouteProgress? progress;
   final DateTime now;
+
+  /// On an expedition, the live fix to tell the destination's direction
+  /// from.
+  final Fix? here;
   final VoidCallback onSearch;
   final VoidCallback onClear;
   final VoidCallback onRetry;
@@ -971,33 +999,64 @@ class _DestinationLine extends StatelessWidget {
       _ when planning && route.kind == null => ('Planning the way…', false),
       (null, _) => ('The way is planned at the first GPS fix.', false),
       (RouteKind.road, null) => (
-        '${kilometres(meters)} by road'
+        '${kilometres(meters)} ${wayWords(mode)}'
             '${seconds == null ? '' : ' · ${_roughly(seconds)}'}',
         false,
       ),
       (RouteKind.road, _) => (
-        '${kilometres(meters)} to go by road'
+        '${kilometres(meters)} to go ${wayWords(mode)}'
             '${seconds == null ? '' : ' · ${_roughly(seconds)}, arriving '
                       'around ${_clock(context, seconds)}'}',
         false,
       ),
       (RouteKind.straight, _) => (
-        '${kilometres(meters)} in a straight line, not by road. '
-            '${planning ? 'Looking for a road…' : why?.message ?? 'No road route was found.'}',
+        '${kilometres(meters)} in a straight line, ${notAWay(mode)}. '
+            '${planning ? 'Looking for a way…' : why?.message ?? 'No way was found.'}',
         !planning,
       ),
     };
+    final compass = _compass(route);
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: _DestinationCard(
         title: 'To ${route.destination}',
-        subtitle: subtitle,
+        subtitle: compass == null ? subtitle : '$subtitle\n$compass',
         onSearch: onSearch,
         onClear: onClear,
         action: retry ? (label: 'Try again', onPressed: onRetry) : null,
       ),
     );
   }
+
+  /// "1.24 km NW (312°) in a straight line · ahead left": the direction
+  /// as the crow flies, and, while moving, where that is from the way the
+  /// walker is going. Off-trail, this is what finds the way.
+  String? _compass(RouteRow route) {
+    final here = this.here;
+    if (here == null || (progress?.arrived ?? false)) return null;
+    final bearing = bearingBetween(
+      here.latitude,
+      here.longitude,
+      route.latitude,
+      route.longitude,
+    );
+    final meters = metersBetween(
+      here.latitude,
+      here.longitude,
+      route.latitude,
+      route.longitude,
+    );
+    final heading = here.heading;
+    final moving = (here.speed ?? 0) >= _movingAbove && heading != null;
+    return [
+      '${kilometres(meters)} ${compassPoint(bearing)} '
+          '(${bearing.round() % 360}°) in a straight line',
+      if (moving) relativeDirection(bearing, heading),
+    ].join(' · ');
+  }
+
+  /// Slower than this, the GPS's direction of travel is not to be trusted.
+  static const _movingAbove = 0.5;
 
   /// The time of day [seconds] from [now]: an estimate, said as one.
   String _clock(BuildContext context, double seconds) =>
@@ -1191,6 +1250,13 @@ class _CoordinatesState extends State<_Coordinates> {
                 if (!live) 'Last known:',
                 text,
                 if (accuracy != null) '±${accuracy.round()} m',
+                // As the GPS reports it; GPS height is rougher than position.
+                if (fix.altitude case final altitude?)
+                  '· altitude ${altitude.round()} m'
+                      '${switch (fix.altitudeAccuracy) {
+                        final vertical? => ' ±${vertical.round()} m',
+                        null => '',
+                      }}',
               ].join(' '),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontFeatures: const [FontFeature.tabularFigures()],

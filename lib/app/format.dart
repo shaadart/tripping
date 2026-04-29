@@ -56,3 +56,16 @@ String coordinatesText(double latitude, double longitude) =>
 
 /// Whole metres up or down: GPS height is not finer than that.
 String climbText(double meters) => '${meters.round()} m';
+
+/// How a planned way goes: Valhalla plans by road for a road journey and on
+/// foot (paths and tracks too) for an expedition.
+String wayWords(JourneyMode mode) => switch (mode) {
+  JourneyMode.road => 'by road',
+  JourneyMode.expedition => 'on foot',
+};
+
+/// What a straight line is not, for [mode].
+String notAWay(JourneyMode mode) => switch (mode) {
+  JourneyMode.road => 'not by road',
+  JourneyMode.expedition => 'not along a path',
+};

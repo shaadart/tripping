@@ -200,7 +200,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(shownRoute?.destination, 'Camp');
     expect(find.text('To Camp'), findsOneWidget);
-    expect(find.text('Planned 6.30 km by road · Reached'), findsOneWidget);
+    expect(find.text('Planned 6.30 km on foot · Reached'), findsOneWidget);
   });
 
   testWidgets('a straight line that was never reached says both', (
@@ -212,7 +212,7 @@ void main() {
     await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
     await tester.pumpAndSettle();
     expect(
-      find.text('6.30 km in a straight line, not by road · Not reached'),
+      find.text('6.30 km in a straight line, not along a path · Not reached'),
       findsOneWidget,
     );
   });

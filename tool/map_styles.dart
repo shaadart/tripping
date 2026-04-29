@@ -17,6 +17,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:tripping/map/terrain.dart';
+
 void main() {
   final positron = _read('positron');
   final dark = _read('dark');
@@ -27,7 +29,7 @@ void main() {
       shadow: '#6B5A48',
       highlight: '#FFFDF8',
       accent: '#8A7660',
-      exaggeration: 0.35,
+      exaggeration: terrainExaggeration['light']!,
     ),
   );
   _write(
@@ -38,7 +40,7 @@ void main() {
       shadow: '#000000',
       highlight: '#7A6A5C',
       accent: '#000000',
-      exaggeration: 0.5,
+      exaggeration: terrainExaggeration['dark']!,
     ),
   );
   _write(
@@ -48,7 +50,7 @@ void main() {
       shadow: '#7A6A58',
       highlight: '#FFFFFF',
       accent: '#8A7660',
-      exaggeration: 0.25,
+      exaggeration: terrainExaggeration['sun']!,
     ),
   );
 }

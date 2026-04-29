@@ -28,8 +28,10 @@ class RoutePlanner {
   Stream<RouteRow?> watch(int journeyId) => _store.watchRoute(journeyId);
 
   /// Sends [journeyId] to [place]. The way there is planned separately,
-  /// once there is a position to start from (see [plan]).
-  Future<void> goTo(int journeyId, Place place) async {
+  /// once there is a position to start from (see [plan]). A searched place
+  /// is remembered for next time unless [remember] is false (a waypoint of
+  /// this journey, say).
+  Future<void> goTo(int journeyId, Place place, {bool remember = true}) async {
     await _store.setDestination(
       journeyId,
       name: place.name,
@@ -37,7 +39,7 @@ class RoutePlanner {
       latitude: place.latitude,
       longitude: place.longitude,
     );
-    if (place.name != mapPoint) {
+    if (remember && place.name != mapPoint) {
       await _store.rememberPlace(
         name: place.name,
         detail: place.detail,

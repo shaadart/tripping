@@ -391,6 +391,25 @@ void main() {
       await tester.pump();
       expect(find.text('32.00000° N, 77.00000° E ±3 m'), findsOneWidget);
 
+      // Altitude when the GPS gives one, with its own accuracy.
+      await act(
+        tester,
+        () async => location.emit(
+          Fix(
+            time: t0.add(const Duration(seconds: 1)),
+            latitude: 32,
+            longitude: 77,
+            accuracy: 3,
+            altitude: 2240.4,
+            altitudeAccuracy: 8,
+          ),
+        ),
+      );
+      expect(
+        find.text('32.00000° N, 77.00000° E ±3 m · altitude 2240 m ±8 m'),
+        findsOneWidget,
+      );
+
       final copied = <Object?>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,

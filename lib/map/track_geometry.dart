@@ -224,6 +224,8 @@ Map<String, Object> waypointFeatures(List<WaypointRow> waypoints) =>
       for (final (i, waypoint) in waypoints.indexed)
         {
           'type': 'Feature',
+          // Taps on the map report this id.
+          'id': waypoint.id,
           'properties': {
             'kind': waypoint.kind.name,
             'label': waypointLabel(waypoint, i),

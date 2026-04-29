@@ -166,6 +166,8 @@ void main() {
       {'kind': 'marked', 'label': 'Spring'},
       {'kind': 'planned', 'label': '2'},
     ]);
+    // Taps on the map report the waypoint's id.
+    expect([for (final feature in features) (feature as Map)['id']], [1, 2]);
     expect(coordinatesOf({'features': features}).last, [77.002, 32]);
   });
 

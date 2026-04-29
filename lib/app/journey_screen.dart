@@ -209,6 +209,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
                         future: _loaded,
                         builder: (context, snapshot) => switch (snapshot.data) {
                           (final track, _, final route?) => _Destination(
+                            mode: journey.mode,
                             route: route,
                             track: track,
                           ),
@@ -236,8 +237,13 @@ class _JourneyScreenState extends State<JourneyScreen> {
 /// Where the journey was going, the way planned, and whether the track
 /// got there.
 class _Destination extends StatelessWidget {
-  const _Destination({required this.route, required this.track});
+  const _Destination({
+    required this.mode,
+    required this.route,
+    required this.track,
+  });
 
+  final JourneyMode mode;
   final RouteRow route;
   final List<List<Fix>> track;
 
@@ -263,9 +269,10 @@ class _Destination extends StatelessWidget {
                   [
                     switch ((route.kind, meters)) {
                       (RouteKind.road, final meters?) =>
-                        'Planned ${kilometres(meters)} by road',
+                        'Planned ${kilometres(meters)} ${wayWords(mode)}',
                       (RouteKind.straight, final meters?) =>
-                        '${kilometres(meters)} in a straight line, not by road',
+                        '${kilometres(meters)} in a straight line, '
+                            '${notAWay(mode)}',
                       _ => 'No way was planned',
                     },
                     there ? 'Reached' : 'Not reached',

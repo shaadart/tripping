@@ -36,3 +36,30 @@ extension FixGeometry on Fix {
   double bearingTo(Fix other) =>
       bearingBetween(latitude, longitude, other.latitude, other.longitude);
 }
+
+/// The nearest of eight compass points for a bearing: N, NE, E, SE, S, SW,
+/// W or NW.
+String compassPoint(double bearing) => const [
+  'N',
+  'NE',
+  'E',
+  'SE',
+  'S',
+  'SW',
+  'W',
+  'NW',
+][((bearing % 360) / 45).round() % 8];
+
+/// Where a [bearing] lies from someone moving along [heading], in words:
+/// ahead, ahead right, right, behind right, behind, behind left, left or
+/// ahead left.
+String relativeDirection(double bearing, double heading) => const [
+  'ahead',
+  'ahead right',
+  'right',
+  'behind right',
+  'behind',
+  'behind left',
+  'left',
+  'ahead left',
+][(((bearing - heading) % 360) / 45).round() % 8];

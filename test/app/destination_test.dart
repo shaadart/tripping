@@ -310,4 +310,60 @@ void main() {
     expect(find.text('You have arrived.'), findsOneWidget);
     await cleanUp(tester);
   });
+
+  testWidgets('on an expedition, the direction as the crow flies', (
+    tester,
+  ) async {
+    await show(tester);
+    await pickCamp(tester);
+    await act(tester, () async => tester.tap(find.text('Expedition')));
+    // Standing: distance and compass point, but no "ahead" or "left".
+    await act(
+      tester,
+      () async => location.emit(
+        Fix(time: t0, latitude: 32, longitude: 77, accuracy: 3, speed: 0),
+      ),
+    );
+    await act(tester, () async {});
+    expect(
+      find.textContaining('5.56 km N (0°) in a straight line'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('ahead'), findsNothing);
+    // An expedition's way is planned on foot, not by road.
+    expect(find.textContaining('to go on foot'), findsOneWidget);
+    expect(find.textContaining('by road'), findsNothing);
+
+    // Walking east: the camp lies to the left.
+    await act(
+      tester,
+      () async => location.emit(eastFix(1, 1.5).copyWithHeading(90)),
+    );
+    expect(
+      find.textContaining('N (0°) in a straight line · left'),
+      findsOneWidget,
+    );
+    await cleanUp(tester);
+  });
+
+  testWidgets('on the road there is no crow-flies line', (tester) async {
+    await show(tester);
+    await pickCamp(tester);
+    await act(tester, () async => tester.tap(find.text('Road journey')));
+    await act(tester, () async => location.emit(walkFix(0)));
+    await act(tester, () async {});
+    expect(find.textContaining('in a straight line'), findsNothing);
+    await cleanUp(tester);
+  });
+}
+
+extension on Fix {
+  Fix copyWithHeading(double heading) => Fix(
+    time: time,
+    latitude: latitude,
+    longitude: longitude,
+    accuracy: accuracy,
+    speed: speed,
+    heading: heading,
+  );
 }

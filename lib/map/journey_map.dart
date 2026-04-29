@@ -15,6 +15,7 @@ import '../places/place.dart';
 import '../places/polyline.dart';
 import '../routing/route_planner.dart';
 import 'map_style.dart';
+import 'terrain.dart';
 import 'track_geometry.dart';
 
 /// Seconds without a fix after which the position is drawn as stale.
@@ -95,6 +96,9 @@ class _JourneyMapState extends State<JourneyMap> {
   Offset? _touchStart;
   bool _blank = false;
   StreamSubscription<List<WaypointRow>>? _waypointWatch;
+
+  /// The journey's waypoints as drawn, to answer a tap on one.
+  List<WaypointRow> _waypoints = const [];
   Timer? _blankTimer;
   StreamSubscription<RouteRow?>? _routeWatch;
   JourneyMode _mode = JourneyMode.expedition;
@@ -201,6 +205,7 @@ class _JourneyMapState extends State<JourneyMap> {
 
     if (journey?.id != _journeyId) {
       _journeyId = journey?.id;
+      await _shade(map, journey?.mode);
       _watchWaypoints(map, journey?.id);
       _watchRoute(map, journey?.id);
       _track.reset(
@@ -370,25 +375,36 @@ class _JourneyMapState extends State<JourneyMap> {
   }
 
   /// Keeps the waypoint layer in step with the store for [journeyId].
+  /// Terrain-forward on an expedition, quieter on the road (D2).
+  Future<void> _shade(MapLibreMapController map, JourneyMode? mode) async {
+    final strength = terrainShading(lookOf(context).look.name, mode);
+    try {
+      await map.setLayerProperties(
+        'hillshade',
+        HillshadeLayerProperties(hillshadeExaggeration: strength),
+      );
+    } on Object {
+      // A style without hill shading: nothing to adjust.
+    }
+  }
+
   void _watchWaypoints(MapLibreMapController map, int? journeyId) {
     _waypointWatch?.cancel();
     _waypointWatch = null;
+    _waypoints = const [];
     if (journeyId == null) {
       _serially(
         () => map.setGeoJsonSource(_waypointSource, waypointFeatures(const [])),
       );
       return;
     }
-    _waypointWatch = widget.store
-        .watchWaypoints(journeyId)
-        .listen(
-          (waypoints) => _serially(
-            () => map.setGeoJsonSource(
-              _waypointSource,
-              waypointFeatures(waypoints),
-            ),
-          ),
-        );
+    _waypointWatch = widget.store.watchWaypoints(journeyId).listen((waypoints) {
+      _waypoints = waypoints;
+      _serially(
+        () =>
+            map.setGeoJsonSource(_waypointSource, waypointFeatures(waypoints)),
+      );
+    });
   }
 
   /// Draws the journey's destination and the way there; with no journey,
@@ -456,31 +472,34 @@ class _JourneyMapState extends State<JourneyMap> {
       Interrupted(:final journey) => journey,
       Idle() => null,
     };
+    final goHere = ListTile(
+      leading: const Icon(Icons.flag_circle_outlined),
+      title: const Text('Go here'),
+      subtitle: Text(
+        journey == null
+            ? 'Make it the destination of the next journey'
+            : 'Make it the destination of this journey',
+      ),
+      onTap: () => Navigator.pop(context, 'go'),
+    );
+    final planHere = ListTile(
+      leading: const Icon(Icons.outlined_flag),
+      title: const Text('Plan a point here'),
+      subtitle: const Text('A waypoint you mean to reach'),
+      onTap: () => Navigator.pop(context, 'plan'),
+    );
     final choice = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.flag_circle_outlined),
-              title: const Text('Go here'),
-              subtitle: Text(
-                journey == null
-                    ? 'Make it the destination of the next journey'
-                    : 'Make it the destination of this journey',
-              ),
-              onTap: () => Navigator.pop(context, 'go'),
-            ),
-            if (journey != null)
-              ListTile(
-                leading: const Icon(Icons.outlined_flag),
-                title: const Text('Plan a point here'),
-                subtitle: const Text('A waypoint you mean to reach'),
-                onTap: () => Navigator.pop(context, 'plan'),
-              ),
-          ],
+          // Waypoints first on an expedition (D2).
+          children: switch (journey?.mode) {
+            null => [goHere],
+            JourneyMode.road => [goHere, planHere],
+            JourneyMode.expedition => [planHere, goHere],
+          },
         ),
       ),
     );
@@ -500,6 +519,47 @@ class _JourneyMapState extends State<JourneyMap> {
       case 'plan':
         await _plan(at);
     }
+  }
+
+  /// A tapped waypoint can become where the journey is heading.
+  Future<void> _waypointTapped(String id, String layerId) async {
+    final planner = widget.planner;
+    final journey = switch (widget.state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey,
+      Idle() => null,
+    };
+    if (planner == null || journey == null) return;
+    if (!layerId.startsWith(_waypointSource)) return;
+    final index = _waypoints.indexWhere((w) => '${w.id}' == id);
+    if (index < 0) return;
+    final waypoint = _waypoints[index];
+    final name = waypoint.name ?? 'Waypoint ${waypointLabel(waypoint, index)}';
+    final head = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListTile(
+          leading: const Icon(Icons.near_me_outlined),
+          title: Text('Head to $name'),
+          subtitle: const Text(
+            'Make it the destination: its distance and direction show below',
+          ),
+          onTap: () => Navigator.pop(context, true),
+        ),
+      ),
+    );
+    if (!(head ?? false) || !mounted) return;
+    await planner.goTo(
+      journey.id,
+      Place(
+        name: name,
+        latitude: waypoint.latitude,
+        longitude: waypoint.longitude,
+      ),
+      remember: false,
+    );
   }
 
   /// A long press plans a point there, on the journey under way.
@@ -568,7 +628,13 @@ class _JourneyMapState extends State<JourneyMap> {
               target: LatLng(20, 0),
               zoom: 1,
             ),
-            onMapCreated: (map) => _map = map,
+            onMapCreated: (map) {
+              _map = map;
+              map.onFeatureTapped.add(
+                (_, _, id, layerId, _) =>
+                    unawaited(_waypointTapped(id, layerId)),
+              );
+            },
             onStyleLoadedCallback: _onStyleLoaded,
             onMapLongClick: (_, at) => _longPress(at),
             // Below the status bar, level with the header (the road view
