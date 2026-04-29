@@ -97,6 +97,7 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
           JourneyMap(state: state, store: store, now: now, planner: planner),
       places: PhotonSearch(),
       planner: planner,
+      settings: settings,
       waypoints: store,
       onToggleHighSun: () => settings.setHighSun(!settings.highSun.value),
       savedOffline: offline.saved,

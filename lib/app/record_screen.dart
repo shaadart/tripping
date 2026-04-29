@@ -19,8 +19,11 @@ import '../recording/course.dart';
 import '../recording/location_source.dart';
 import '../recording/recorder.dart';
 import '../recording/track_policy.dart';
+import '../group/invite.dart';
 import 'figure.dart';
 import 'format.dart';
+import 'group_screens.dart';
+import 'settings.dart';
 import 'system_access.dart';
 import 'search_screen.dart';
 import 'theme.dart';
@@ -58,6 +61,9 @@ class RecordScreen extends StatefulWidget {
     this.savedOffline,
     this.places,
     this.planner,
+    this.settings,
+    this.scannerBuilder,
+    this.shareText,
     this.onToggleHighSun,
     this.clock = _utcNow,
   });
@@ -87,6 +93,16 @@ class RecordScreen extends StatefulWidget {
   /// Keeps destinations and plans the way there.
   final RoutePlanner? planner;
 
+  /// The user's name and participant id; with [waypoints] (the store),
+  /// enables groups.
+  final Settings? settings;
+
+  /// Builds the invite-code scanner; injected so tests need no camera.
+  final WidgetBuilder? scannerBuilder;
+
+  /// Shares an invitation's text; injected so tests need no platform.
+  final Future<void> Function(String text)? shareText;
+
   /// Switches the high-contrast look for bright daylight on or off.
   final VoidCallback? onToggleHighSun;
   final DateTime Function() clock;
@@ -110,6 +126,13 @@ class _RecordScreenState extends State<RecordScreen>
   RouteRow? _route;
   RouteError? _routeWhy;
   bool _planning = false;
+
+  /// The group of the journey shown (G1), and a join waiting for the
+  /// journey it is starting.
+  StreamSubscription<MembershipRow?>? _groupWatch;
+  int? _groupJourney;
+  MembershipRow? _membership;
+  Invite? _pendingJoin;
 
   /// Progress along the way, from the newest live fix.
   RouteFollower? _follower;
@@ -139,13 +162,17 @@ class _RecordScreenState extends State<RecordScreen>
       setState(() => _state = state);
       _syncTicker();
       _followRoute(state);
+      _followGroup(state);
       _follow();
       _trackCourse();
     });
     _syncTicker();
     _followRoute(_state);
+    _followGroup(_state);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshSystem());
+    widget.system.linksArrive.addListener(_takeLink);
+    _takeLink();
   }
 
   @override
@@ -154,12 +181,17 @@ class _RecordScreenState extends State<RecordScreen>
     _ticker?.cancel();
     unawaited(_changes.cancel());
     unawaited(_routeWatch?.cancel());
+    unawaited(_groupWatch?.cancel());
+    widget.system.linksArrive.removeListener(_takeLink);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(_refreshSystem());
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshSystem());
+      _takeLink();
+    }
   }
 
   Future<void> _refreshSystem() async {
@@ -372,6 +404,138 @@ class _RecordScreenState extends State<RecordScreen>
     if (!asked && last != null && at.difference(last) < _replanEvery) return;
     _replannedAt = at;
     _planIfDue(again: true, keepOnFailure: true);
+  }
+
+  bool get _groups => widget.settings != null && widget.waypoints != null;
+
+  /// Watches the group of the journey shown. A join chosen before the start
+  /// goes with the new journey.
+  void _followGroup(RecorderState state) {
+    final store = widget.waypoints;
+    if (store == null || !_groups) return;
+    final journey = switch (state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey,
+      Idle() => null,
+    };
+    if (journey?.id == _groupJourney) return;
+    _groupJourney = journey?.id;
+    unawaited(_groupWatch?.cancel());
+    _groupWatch = null;
+    _membership = null;
+    if (journey == null) return;
+    final join = _pendingJoin;
+    _pendingJoin = null;
+    if (join != null) unawaited(_saveJoin(journey, join));
+    _groupWatch = store.watchMembership(journey.id).listen((membership) {
+      if (mounted) setState(() => _membership = membership);
+    });
+  }
+
+  Future<void> _saveJoin(JourneyRow journey, Invite invite) async {
+    if (invite.groupId == journey.uuid) {
+      _tell('That is your own group.');
+      return;
+    }
+    try {
+      await widget.waypoints!.saveMembership(
+        journey.id,
+        groupId: invite.groupId,
+        secret: invite.secret,
+        role: GroupRole.member,
+        hostName: invite.hostName,
+        at: widget.clock(),
+      );
+    } on StateError {
+      _tell('This journey is already in a group.');
+    }
+  }
+
+  /// Hands an invitation link that opened Tripping to the join screen.
+  void _takeLink() {
+    if (!_groups) return;
+    unawaited(() async {
+      final link = await widget.system.takeOpenedLink();
+      final invite = Invite.find(link ?? '');
+      if (invite != null && mounted) await _join(invite);
+    }());
+  }
+
+  /// Makes the journey's group (or reuses it) and shows its invitation.
+  Future<void> _invite() async {
+    final store = widget.waypoints;
+    final settings = widget.settings;
+    final journey = switch (_state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey,
+      Idle() => null,
+    };
+    if (store == null || settings == null || journey == null) return;
+    final name = await nameForGroups(context, settings);
+    if (name == null || !mounted) return;
+    await settings.participantId();
+    var membership = await store.membershipOf(journey.id);
+    if (membership == null) {
+      final made = Invite.create(journey.uuid, name);
+      await store.saveMembership(
+        journey.id,
+        groupId: made.groupId,
+        secret: made.secret,
+        role: GroupRole.creator,
+        at: widget.clock(),
+      );
+      membership = await store.membershipOf(journey.id);
+    }
+    if (membership == null || !mounted) return;
+    final invite = Invite(
+      groupId: membership.groupId,
+      secret: membership.secret,
+      hostName: membership.hostName ?? name,
+    );
+    _open((_) => InviteScreen(invite: invite, share: widget.shareText));
+  }
+
+  /// Finds an invitation (or takes [from]) and joins it: with the journey
+  /// under way, or by starting one.
+  Future<void> _join([Invite? from]) async {
+    final settings = widget.settings;
+    if (settings == null || !_groups) return;
+    final name = await nameForGroups(context, settings);
+    if (name == null || !mounted) return;
+    await settings.participantId();
+    if (!mounted) return;
+    final state = _state;
+    final journey = switch (state) {
+      Recording(:final journey) ||
+      Paused(:final journey) ||
+      Interrupted(:final journey) => journey,
+      Idle() => null,
+    };
+    final choice = await Navigator.of(context).push<JoinChoice>(
+      MaterialPageRoute(
+        builder: (_) => JoinScreen(
+          place: journey == null
+              ? JoinPlace.startJourney
+              : _membership == null
+              ? JoinPlace.thisJourney
+              : JoinPlace.alreadyInGroup,
+          invite: from,
+          scannerBuilder: widget.scannerBuilder,
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    final start = choice.start;
+    if (journey != null) {
+      await _saveJoin(journey, choice.invite);
+    } else if (start != null) {
+      _pendingJoin = choice.invite;
+      await _askFor(() => widget.recorder.start(start));
+      // Asked of the recorder: the screen may hear of the start later.
+      if (widget.recorder.state is Idle) _pendingJoin = null;
+    }
   }
 
   /// Plans the way once there is a destination and a live fix to start
@@ -606,6 +770,12 @@ class _RecordScreenState extends State<RecordScreen>
                             onRetry: () => _replan(asked: true),
                           ),
                         },
+                      if (_groups && state is! Idle)
+                        _GroupLine(
+                          membership: _membership,
+                          onInvite: _invite,
+                          onJoin: _join,
+                        ),
                       const SizedBox(height: 12),
                       _StatusLine(
                         state: state,
@@ -681,6 +851,12 @@ class _RecordScreenState extends State<RecordScreen>
                 onPressed: () => _open(offline),
                 icon: const Icon(Icons.download_for_offline_outlined),
                 label: const Text('Offline maps'),
+              ),
+            if (_groups)
+              TextButton.icon(
+                onPressed: _join,
+                icon: const Icon(Icons.group_add_outlined),
+                label: const Text('Join a group'),
               ),
           ],
         ),
@@ -1093,6 +1269,67 @@ class _DestinationLine extends StatelessWidget {
     if (minutes < 1) return 'under a minute';
     if (minutes < 60) return 'about $minutes min';
     return 'about ${minutes ~/ 60} h ${minutes % 60} min';
+  }
+}
+
+/// The journey's group, in plain words: in one or not, and never more
+/// connected than it is (G1 forms groups; nothing is shared yet).
+class _GroupLine extends StatelessWidget {
+  const _GroupLine({
+    required this.membership,
+    required this.onInvite,
+    required this.onJoin,
+  });
+
+  final MembershipRow? membership;
+  final VoidCallback onInvite;
+  final VoidCallback onJoin;
+
+  @override
+  Widget build(BuildContext context) {
+    final membership = this.membership;
+    if (membership == null) {
+      return Wrap(
+        children: [
+          TextButton.icon(
+            onPressed: onInvite,
+            icon: const Icon(Icons.group_add_outlined),
+            label: const Text('Invite companions'),
+          ),
+          TextButton(onPressed: onJoin, child: const Text('Join a group')),
+        ],
+      );
+    }
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final host = membership.hostName;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          Icon(Icons.group_outlined, color: scheme.secondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(switch (membership.role) {
+                  GroupRole.creator => 'Your group',
+                  GroupRole.member => "In ${host ?? 'a'}'s group",
+                }, style: text.titleMedium),
+                Text(
+                  'Not connected yet: positions are not shared',
+                  style: text.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onInvite, child: const Text('Invite')),
+        ],
+      ),
+    );
   }
 }
 

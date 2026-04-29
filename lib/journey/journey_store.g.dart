@@ -3371,6 +3371,418 @@ class RecentPlacesCompanion extends UpdateCompanion<RecentPlaceRow> {
   }
 }
 
+class Memberships extends Table with TableInfo<Memberships, MembershipRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  Memberships(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _journeyIdMeta = const VerificationMeta(
+    'journeyId',
+  );
+  late final GeneratedColumn<int> journeyId = GeneratedColumn<int>(
+    'journey_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL PRIMARY KEY REFERENCES journeys(id)ON DELETE CASCADE',
+  );
+  static const VerificationMeta _groupIdMeta = const VerificationMeta(
+    'groupId',
+  );
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  static const VerificationMeta _secretMeta = const VerificationMeta('secret');
+  late final GeneratedColumn<String> secret = GeneratedColumn<String>(
+    'secret',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumnWithTypeConverter<GroupRole, String> role =
+      GeneratedColumn<String>(
+        'role',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      ).withConverter<GroupRole>(Memberships.$converterrole);
+  static const VerificationMeta _hostNameMeta = const VerificationMeta(
+    'hostName',
+  );
+  late final GeneratedColumn<String> hostName = GeneratedColumn<String>(
+    'host_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> joinedAt =
+      GeneratedColumn<int>(
+        'joined_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      ).withConverter<DateTime>(Memberships.$converterjoinedAt);
+  @override
+  List<GeneratedColumn> get $columns => [
+    journeyId,
+    groupId,
+    secret,
+    role,
+    hostName,
+    joinedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'memberships';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MembershipRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('journey_id')) {
+      context.handle(
+        _journeyIdMeta,
+        journeyId.isAcceptableOrUnknown(data['journey_id']!, _journeyIdMeta),
+      );
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(
+        _groupIdMeta,
+        groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    if (data.containsKey('secret')) {
+      context.handle(
+        _secretMeta,
+        secret.isAcceptableOrUnknown(data['secret']!, _secretMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_secretMeta);
+    }
+    if (data.containsKey('host_name')) {
+      context.handle(
+        _hostNameMeta,
+        hostName.isAcceptableOrUnknown(data['host_name']!, _hostNameMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {journeyId};
+  @override
+  MembershipRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MembershipRow(
+      journeyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journey_id'],
+      )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_id'],
+      )!,
+      secret: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}secret'],
+      )!,
+      role: Memberships.$converterrole.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}role'],
+        )!,
+      ),
+      hostName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_name'],
+      ),
+      joinedAt: Memberships.$converterjoinedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}joined_at'],
+        )!,
+      ),
+    );
+  }
+
+  @override
+  Memberships createAlias(String alias) {
+    return Memberships(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<GroupRole, String, String> $converterrole =
+      const GroupRoleByName();
+  static TypeConverter<DateTime, int> $converterjoinedAt = const UtcMillis();
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class MembershipRow extends DataClass implements Insertable<MembershipRow> {
+  final int journeyId;
+
+  /// The group's id: the inviting journey's uuid.
+  final String groupId;
+
+  /// The capability: whoever holds it may join. Never logged or exported.
+  final String secret;
+
+  /// Stored by name (see waypoints.kind).
+  final GroupRole role;
+
+  /// Who invited, as they named themselves; null for the inviter.
+  final String? hostName;
+  final DateTime joinedAt;
+  const MembershipRow({
+    required this.journeyId,
+    required this.groupId,
+    required this.secret,
+    required this.role,
+    this.hostName,
+    required this.joinedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['journey_id'] = Variable<int>(journeyId);
+    map['group_id'] = Variable<String>(groupId);
+    map['secret'] = Variable<String>(secret);
+    {
+      map['role'] = Variable<String>(Memberships.$converterrole.toSql(role));
+    }
+    if (!nullToAbsent || hostName != null) {
+      map['host_name'] = Variable<String>(hostName);
+    }
+    {
+      map['joined_at'] = Variable<int>(
+        Memberships.$converterjoinedAt.toSql(joinedAt),
+      );
+    }
+    return map;
+  }
+
+  MembershipsCompanion toCompanion(bool nullToAbsent) {
+    return MembershipsCompanion(
+      journeyId: Value(journeyId),
+      groupId: Value(groupId),
+      secret: Value(secret),
+      role: Value(role),
+      hostName: hostName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hostName),
+      joinedAt: Value(joinedAt),
+    );
+  }
+
+  factory MembershipRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MembershipRow(
+      journeyId: serializer.fromJson<int>(json['journey_id']),
+      groupId: serializer.fromJson<String>(json['group_id']),
+      secret: serializer.fromJson<String>(json['secret']),
+      role: Memberships.$converterrole.fromJson(
+        serializer.fromJson<String>(json['role']),
+      ),
+      hostName: serializer.fromJson<String?>(json['host_name']),
+      joinedAt: serializer.fromJson<DateTime>(json['joined_at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'journey_id': serializer.toJson<int>(journeyId),
+      'group_id': serializer.toJson<String>(groupId),
+      'secret': serializer.toJson<String>(secret),
+      'role': serializer.toJson<String>(
+        Memberships.$converterrole.toJson(role),
+      ),
+      'host_name': serializer.toJson<String?>(hostName),
+      'joined_at': serializer.toJson<DateTime>(joinedAt),
+    };
+  }
+
+  MembershipRow copyWith({
+    int? journeyId,
+    String? groupId,
+    String? secret,
+    GroupRole? role,
+    Value<String?> hostName = const Value.absent(),
+    DateTime? joinedAt,
+  }) => MembershipRow(
+    journeyId: journeyId ?? this.journeyId,
+    groupId: groupId ?? this.groupId,
+    secret: secret ?? this.secret,
+    role: role ?? this.role,
+    hostName: hostName.present ? hostName.value : this.hostName,
+    joinedAt: joinedAt ?? this.joinedAt,
+  );
+  MembershipRow copyWithCompanion(MembershipsCompanion data) {
+    return MembershipRow(
+      journeyId: data.journeyId.present ? data.journeyId.value : this.journeyId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+      secret: data.secret.present ? data.secret.value : this.secret,
+      role: data.role.present ? data.role.value : this.role,
+      hostName: data.hostName.present ? data.hostName.value : this.hostName,
+      joinedAt: data.joinedAt.present ? data.joinedAt.value : this.joinedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MembershipRow(')
+          ..write('journeyId: $journeyId, ')
+          ..write('groupId: $groupId, ')
+          ..write('secret: $secret, ')
+          ..write('role: $role, ')
+          ..write('hostName: $hostName, ')
+          ..write('joinedAt: $joinedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(journeyId, groupId, secret, role, hostName, joinedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MembershipRow &&
+          other.journeyId == this.journeyId &&
+          other.groupId == this.groupId &&
+          other.secret == this.secret &&
+          other.role == this.role &&
+          other.hostName == this.hostName &&
+          other.joinedAt == this.joinedAt);
+}
+
+class MembershipsCompanion extends UpdateCompanion<MembershipRow> {
+  final Value<int> journeyId;
+  final Value<String> groupId;
+  final Value<String> secret;
+  final Value<GroupRole> role;
+  final Value<String?> hostName;
+  final Value<DateTime> joinedAt;
+  const MembershipsCompanion({
+    this.journeyId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.secret = const Value.absent(),
+    this.role = const Value.absent(),
+    this.hostName = const Value.absent(),
+    this.joinedAt = const Value.absent(),
+  });
+  MembershipsCompanion.insert({
+    this.journeyId = const Value.absent(),
+    required String groupId,
+    required String secret,
+    required GroupRole role,
+    this.hostName = const Value.absent(),
+    required DateTime joinedAt,
+  }) : groupId = Value(groupId),
+       secret = Value(secret),
+       role = Value(role),
+       joinedAt = Value(joinedAt);
+  static Insertable<MembershipRow> custom({
+    Expression<int>? journeyId,
+    Expression<String>? groupId,
+    Expression<String>? secret,
+    Expression<String>? role,
+    Expression<String>? hostName,
+    Expression<int>? joinedAt,
+  }) {
+    return RawValuesInsertable({
+      if (journeyId != null) 'journey_id': journeyId,
+      if (groupId != null) 'group_id': groupId,
+      if (secret != null) 'secret': secret,
+      if (role != null) 'role': role,
+      if (hostName != null) 'host_name': hostName,
+      if (joinedAt != null) 'joined_at': joinedAt,
+    });
+  }
+
+  MembershipsCompanion copyWith({
+    Value<int>? journeyId,
+    Value<String>? groupId,
+    Value<String>? secret,
+    Value<GroupRole>? role,
+    Value<String?>? hostName,
+    Value<DateTime>? joinedAt,
+  }) {
+    return MembershipsCompanion(
+      journeyId: journeyId ?? this.journeyId,
+      groupId: groupId ?? this.groupId,
+      secret: secret ?? this.secret,
+      role: role ?? this.role,
+      hostName: hostName ?? this.hostName,
+      joinedAt: joinedAt ?? this.joinedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (journeyId.present) {
+      map['journey_id'] = Variable<int>(journeyId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<String>(groupId.value);
+    }
+    if (secret.present) {
+      map['secret'] = Variable<String>(secret.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(
+        Memberships.$converterrole.toSql(role.value),
+      );
+    }
+    if (hostName.present) {
+      map['host_name'] = Variable<String>(hostName.value);
+    }
+    if (joinedAt.present) {
+      map['joined_at'] = Variable<int>(
+        Memberships.$converterjoinedAt.toSql(joinedAt.value),
+      );
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MembershipsCompanion(')
+          ..write('journeyId: $journeyId, ')
+          ..write('groupId: $groupId, ')
+          ..write('secret: $secret, ')
+          ..write('role: $role, ')
+          ..write('hostName: $hostName, ')
+          ..write('joinedAt: $joinedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$JourneyStore extends GeneratedDatabase {
   _$JourneyStore(QueryExecutor e) : super(e);
   late final Journeys journeys = Journeys(this);
@@ -3387,6 +3799,7 @@ abstract class _$JourneyStore extends GeneratedDatabase {
   );
   late final Routes routes = Routes(this);
   late final RecentPlaces recentPlaces = RecentPlaces(this);
+  late final Memberships memberships = Memberships(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3400,6 +3813,7 @@ abstract class _$JourneyStore extends GeneratedDatabase {
     waypointsByJourney,
     routes,
     recentPlaces,
+    memberships,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3430,6 +3844,13 @@ abstract class _$JourneyStore extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('routes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'journeys',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('memberships', kind: UpdateKind.delete)],
     ),
   ]);
 }

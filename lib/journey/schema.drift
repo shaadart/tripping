@@ -106,3 +106,20 @@ CREATE TABLE recent_places (
   longitude REAL NOT NULL,
   used_at INTEGER NOT NULL MAPPED BY `const UtcMillis()`
 ) AS RecentPlaceRow;
+
+-- The group this journey belongs to (G1), stored with the journey so that
+-- joining works offline. Whether anyone in it is reachable is never stored
+-- here: membership is not connectivity.
+CREATE TABLE memberships (
+  journey_id INTEGER NOT NULL PRIMARY KEY
+    REFERENCES journeys (id) ON DELETE CASCADE,
+  -- The group's id: the inviting journey's uuid.
+  group_id TEXT NOT NULL,
+  -- The capability: whoever holds it may join. Never logged or exported.
+  secret TEXT NOT NULL,
+  -- Stored by name (see waypoints.kind).
+  role TEXT NOT NULL MAPPED BY `const GroupRoleByName()`,
+  -- Who invited, as they named themselves; null for the inviter.
+  host_name TEXT,
+  joined_at INTEGER NOT NULL MAPPED BY `const UtcMillis()`
+) AS MembershipRow;

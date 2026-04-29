@@ -25,6 +25,26 @@ void main() {
     expect(File('${file.path}.next').existsSync(), isFalse);
   });
 
+  test('the participant id is made once and kept', () async {
+    final first = await Settings.open(file);
+    final id = await first.participantId();
+    expect(id, hasLength(22));
+    expect(await first.participantId(), id);
+    expect(await (await Settings.open(file)).participantId(), id);
+  });
+
+  test('the name is asked for once, kept as one short line', () async {
+    final first = await Settings.open(file);
+    expect(first.name.value, isNull);
+    await first.setName('  Asha\n Rao ');
+    expect(first.name.value, 'Asha Rao');
+    final again = await Settings.open(file);
+    expect(again.name.value, 'Asha Rao');
+    // Other settings survive alongside.
+    await again.setHighSun(true);
+    expect((await Settings.open(file)).name.value, 'Asha Rao');
+  });
+
   test('an unreadable file means the defaults, not a failed start', () async {
     file.writeAsStringSync('{not json');
     expect((await Settings.open(file)).highSun.value, isFalse);

@@ -114,6 +114,20 @@ class RouteKindByName extends EnumNameConverter<RouteKind> {
   const RouteKindByName() : super(RouteKind.values);
 }
 
+/// How this phone came to be in a group.
+enum GroupRole {
+  /// It made the group and invites others.
+  creator,
+
+  /// It joined someone's invitation.
+  member,
+}
+
+/// Stores a [GroupRole] by name, like [WaypointKindByName].
+class GroupRoleByName extends EnumNameConverter<GroupRole> {
+  const GroupRoleByName() : super(GroupRole.values);
+}
+
 /// Stores instants as UTC milliseconds since the epoch.
 ///
 /// Drift's default DateTime storage has one-second resolution, which would

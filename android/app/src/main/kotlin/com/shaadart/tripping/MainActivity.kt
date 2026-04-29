@@ -23,6 +23,9 @@ class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var pendingNotificationRequest: MethodChannel.Result? = null
 
+    /** An invitation link that opened Tripping, until Dart takes it. */
+    private var openedLink: String? = null
+
     override fun getCachedEngineId(): String = TrippingApplication.ENGINE_ID
 
     // The engine outlives this activity: the journey keeps its recorder.
@@ -30,6 +33,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        openedLink = inviteLinkIn(intent) ?: openedLink
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tripping/system").apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -37,6 +41,10 @@ class MainActivity : FlutterActivity() {
                     "requestNotifications" -> requestNotifications(result)
                     "backgroundRestricted" -> result.success(backgroundRestricted())
                     "recentExits" -> result.success(recentExits())
+                    "takeOpenedLink" -> {
+                        result.success(openedLink)
+                        openedLink = null
+                    }
                     "openAppSettings" -> {
                         startActivity(
                             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
@@ -57,6 +65,20 @@ class MainActivity : FlutterActivity() {
         pendingNotificationRequest = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
+
+    /** A link while Tripping runs (singleTop): keep it and tell Dart. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val link = inviteLinkIn(intent) ?: return
+        openedLink = link
+        channel?.invokeMethod("linkOpened", null)
+    }
+
+    private fun inviteLinkIn(intent: Intent?): String? =
+        intent?.takeIf { it.action == Intent.ACTION_VIEW }
+            ?.data
+            ?.takeIf { it.scheme == "tripping" && it.host == "invite" }
+            ?.toString()
 
     override fun onRequestPermissionsResult(
         requestCode: Int,

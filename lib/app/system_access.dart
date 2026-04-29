@@ -51,6 +51,13 @@ abstract interface class SystemAccess {
 
   /// Opens Tripping's page in the system settings.
   Future<void> openAppSettings();
+
+  /// The link that opened Tripping (a group invitation), handed over once;
+  /// null when there is none.
+  Future<String?> takeOpenedLink();
+
+  /// Notifies when a link opens Tripping while it is running.
+  Listenable get linksArrive;
 }
 
 /// [SystemAccess] over the `tripping/system` channel in MainActivity.kt.
@@ -88,6 +95,21 @@ class ChannelSystemAccess implements SystemAccess {
   @override
   Future<void> openAppSettings() => _call<void>('openAppSettings');
 
+  @override
+  Future<String?> takeOpenedLink() => _call<String>('takeOpenedLink');
+
+  static final _arrived = _Signal();
+
+  @override
+  Listenable get linksArrive {
+    if (_android) {
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'linkOpened') _arrived.ping();
+      });
+    }
+    return _arrived;
+  }
+
   static Future<T?> _call<T>(String method) async {
     if (!_android) return null;
     try {
@@ -98,4 +120,8 @@ class ChannelSystemAccess implements SystemAccess {
       return null;
     }
   }
+}
+
+class _Signal extends ChangeNotifier {
+  void ping() => notifyListeners();
 }

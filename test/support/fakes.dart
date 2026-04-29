@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:tripping/app/system_access.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
@@ -93,4 +94,25 @@ class FakeSystemAccess implements SystemAccess {
 
   @override
   Future<void> openAppSettings() async => appSettingsOpened++;
+
+  /// A link waiting to be taken, as if it had opened the app.
+  String? openedLink;
+  final _arrive = ChangeNotifier();
+
+  @override
+  Future<String?> takeOpenedLink() async {
+    final link = openedLink;
+    openedLink = null;
+    return link;
+  }
+
+  @override
+  Listenable get linksArrive => _arrive;
+
+  /// A link opening the app while it runs.
+  void open(String link) {
+    openedLink = link;
+    // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+    _arrive.notifyListeners();
+  }
 }

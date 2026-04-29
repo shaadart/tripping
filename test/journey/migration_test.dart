@@ -69,6 +69,32 @@ final _schemaV3 = [
   'CREATE INDEX IF NOT EXISTS waypoints_by_journey ON waypoints (journey_id)',
 ];
 
+/// Schema v4 as shipped in `5bd058e`, frozen: v3 plus routes and recent
+/// places.
+final _schemaV4 = [
+  ..._schemaV3,
+  '''CREATE TABLE routes (
+    journey_id INTEGER NOT NULL PRIMARY KEY
+      REFERENCES journeys (id) ON DELETE CASCADE,
+    destination TEXT NOT NULL,
+    destination_detail TEXT,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    kind TEXT,
+    provider TEXT,
+    computed_at INTEGER,
+    meters REAL,
+    seconds REAL,
+    geometry TEXT)''',
+  '''CREATE TABLE recent_places (
+    id INTEGER NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    detail TEXT,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    used_at INTEGER NOT NULL)''',
+];
+
 const _tables = [
   'journeys',
   'segments',
@@ -76,6 +102,7 @@ const _tables = [
   'waypoints',
   'routes',
   'recent_places',
+  'memberships',
 ];
 
 final _t0 = DateTime.utc(2026, 10, 27, 6, 30).millisecondsSinceEpoch;
@@ -152,7 +179,7 @@ void main() {
     await fresh.close();
     final upgraded = sqlite3.open(file.path);
     final created = sqlite3.open('${dir.path}/fresh.sqlite');
-    expect(upgraded.select('PRAGMA user_version').single.values.single, 4);
+    expect(upgraded.select('PRAGMA user_version').single.values.single, 5);
     for (final table in _tables) {
       expect(columnsOf(upgraded, table), columnsOf(created, table));
     }
@@ -200,7 +227,7 @@ void main() {
     await fresh.close();
     final upgraded = sqlite3.open(file.path);
     final created = sqlite3.open('${dir.path}/fresh.sqlite');
-    expect(upgraded.select('PRAGMA user_version').single.values.single, 4);
+    expect(upgraded.select('PRAGMA user_version').single.values.single, 5);
     for (final table in _tables) {
       expect(columnsOf(upgraded, table), columnsOf(created, table));
     }
@@ -258,7 +285,7 @@ void main() {
       await fresh.close();
       final upgraded = sqlite3.open(file.path);
       final created = sqlite3.open('${dir.path}/fresh.sqlite');
-      expect(upgraded.select('PRAGMA user_version').single.values.single, 4);
+      expect(upgraded.select('PRAGMA user_version').single.values.single, 5);
       for (final table in _tables) {
         expect(columnsOf(upgraded, table), columnsOf(created, table));
       }
@@ -267,14 +294,68 @@ void main() {
     },
   );
 
-  test('a fresh database starts at v4', () async {
+  test(
+    'a v4 database upgrades to v5 with its route, ready for groups',
+    () async {
+      final file = File('${dir.path}/journeys.sqlite');
+      final v4 = sqlite3.open(file.path);
+      for (final statement in _schemaV4) {
+        v4.execute(statement);
+      }
+      v4
+        ..execute('PRAGMA user_version = 4')
+        ..execute(
+          "INSERT INTO journeys VALUES (1, 'u-1', 'road', 'ended', ?, ?, "
+          "NULL, NULL, NULL, NULL, NULL)",
+          [_t0, _t0 + 60000],
+        )
+        ..execute(
+          "INSERT INTO routes VALUES (1, 'Lalbagh', NULL, 12.95, 77.58, "
+          "'road', 'valhalla', ?, 6300, 1300, NULL)",
+          [_t0],
+        )
+        ..close();
+
+      final store = JourneyStore.file(file);
+      final route = (await store.routeOf(1))!;
+      expect((route.destination, route.kind), ('Lalbagh', RouteKind.road));
+      await store.saveMembership(
+        1,
+        groupId: 'u-1',
+        secret: 's' * 22,
+        role: GroupRole.creator,
+        at: DateTime.utc(2026),
+      );
+      expect((await store.membershipOf(1))?.role, GroupRole.creator);
+      await store.close();
+
+      final fresh = JourneyStore.file(File('${dir.path}/fresh.sqlite'));
+      await fresh.activeJourney();
+      await fresh.close();
+      final upgraded = sqlite3.open(file.path);
+      final created = sqlite3.open('${dir.path}/fresh.sqlite');
+      expect(upgraded.select('PRAGMA user_version').single.values.single, 5);
+      for (final table in _tables) {
+        expect(columnsOf(upgraded, table), columnsOf(created, table));
+      }
+      expect(
+        upgraded.select('SELECT role FROM memberships').single.values.single,
+        'creator',
+        reason: 'stored by name, not as an integer',
+      );
+      upgraded.close();
+      created.close();
+    },
+  );
+
+  test('a fresh database starts at v5', () async {
     final store = JourneyStore(NativeDatabase.memory());
     final journey = await store.startJourney(
       JourneyMode.expedition,
       at: DateTime.utc(2026),
     );
     expect(journey.summaryVersion, isNull);
-    expect(store.schemaVersion, 4);
+    expect(store.schemaVersion, 5);
     await store.close();
   });
 }

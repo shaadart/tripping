@@ -58,7 +58,7 @@ class JourneyStore extends _$JourneyStore {
   static const _uuid = Uuid();
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -82,6 +82,7 @@ class JourneyStore extends _$JourneyStore {
         await m.createTable(routes);
         await m.createTable(recentPlaces);
       }
+      if (from < 5) await m.createTable(memberships);
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );
@@ -430,6 +431,41 @@ class JourneyStore extends _$JourneyStore {
 
   Future<void> clearDestination(int journeyId) =>
       (delete(routes)..where((r) => r.journeyId.equals(journeyId))).go();
+
+  /// Puts [journeyId] in a group. A journey is in at most one group:
+  /// joining another is refused rather than silently replacing it.
+  Future<void> saveMembership(
+    int journeyId, {
+    required String groupId,
+    required String secret,
+    required GroupRole role,
+    String? hostName,
+    required DateTime at,
+  }) => transaction(() async {
+    if (await membershipOf(journeyId) != null) {
+      throw StateError('Journey $journeyId is already in a group');
+    }
+    await into(memberships).insert(
+      MembershipsCompanion.insert(
+        journeyId: Value(journeyId),
+        groupId: groupId,
+        secret: secret,
+        role: role,
+        hostName: Value(hostName),
+        joinedAt: at,
+      ),
+    );
+  });
+
+  Future<MembershipRow?> membershipOf(int journeyId) =>
+      _membershipOf(journeyId).getSingleOrNull();
+
+  Stream<MembershipRow?> watchMembership(int journeyId) =>
+      _membershipOf(journeyId).watchSingleOrNull();
+
+  SimpleSelectStatement<Memberships, MembershipRow> _membershipOf(
+    int journeyId,
+  ) => select(memberships)..where((m) => m.journeyId.equals(journeyId));
 
   SimpleSelectStatement<Routes, RouteRow> _routeOf(int journeyId) =>
       select(routes)..where((r) => r.journeyId.equals(journeyId));
