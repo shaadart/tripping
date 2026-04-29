@@ -11,13 +11,13 @@ import '../journey/journey.dart';
 import 'settings.dart';
 
 /// Says, in one place, what joining a group means (D-037): joining is the
-/// choice to share, and sharing ends with the journey, with leaving, or
-/// when the inviter ends the group. A scan or a join is never connectivity.
+/// choice to share; pausing leaves the last point; ending the journey or
+/// leaving stops sharing. A scan or a join is never connectivity.
 const groupNote =
-    'Everyone in the group sees your position while your journey records, '
-    'until you leave the group or end your journey, or the inviter ends '
-    'it. Positions are sealed: the relay cannot read them. Joining is saved '
-    'on this phone, even without a connection.';
+    'Everyone in the group sees your position while your journey records. '
+    'Pausing shows them where you paused; ending your journey or leaving '
+    'the group stops sharing. Positions are sealed: the relay cannot read '
+    'them. Joining is saved on this phone, even without a connection.';
 
 /// The user's name for groups: the one saved, or asked for once. Null if
 /// they back out.

@@ -335,9 +335,10 @@ void main() {
     relay.reach(false);
     await settle(tester);
     expect(
-      find.text("Not connected: the group can't see this phone now"),
+      find.textContaining('· sharing resumes when the connection returns'),
       findsOneWidget,
     );
+    expect(find.textContaining('Offline since'), findsOneWidget);
     // Still said with its age, never as current.
     expect(find.text('Asha · 1.0 km N · 15 s ago'), findsOneWidget);
 

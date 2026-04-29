@@ -13,6 +13,7 @@ class Shared {
     required this.phase,
     required this.mode,
     this.fix,
+    this.fixAge,
   });
 
   final String name;
@@ -20,9 +21,15 @@ class Shared {
   final JourneyMode mode;
   final Fix? fix;
 
-  /// The message before sealing: short keys, about 1 m of precision, under
-  /// 200 bytes even with a 40-character name.
-  Map<String, Object?> toMessage() => {
+  /// How old [fix] was when it was sent, by the sender's own clock: with
+  /// the relay's receipt time it dates the position whatever either phone's
+  /// clock says (G4).
+  final Duration? fixAge;
+
+  /// The message before sealing, sent [at] (the sender's clock): short
+  /// keys, about 1 m of precision, under 200 bytes even with a 40-character
+  /// name.
+  Map<String, Object?> toMessage({DateTime? at}) => {
     'n': name,
     's': phase.name[0],
     'm': mode.name[0],
@@ -33,6 +40,8 @@ class Shared {
         (fix.accuracy ?? 0).round(),
         fix.time.millisecondsSinceEpoch ~/ 1000,
       ],
+    if ((fix, at) case (final fix?, final at?))
+      'o': at.difference(fix.time).inSeconds.clamp(0, 86400),
   };
 
   /// A companion's message, or null when it is not one: damaged, or from a
@@ -68,7 +77,16 @@ class Shared {
         accuracy: accuracy.toDouble(),
       );
     }
-    return Shared(name: name, phase: phase, mode: mode, fix: fix);
+    final age = message['o'];
+    return Shared(
+      name: name,
+      phase: phase,
+      mode: mode,
+      fix: fix,
+      fixAge: fix != null && age is num && age >= 0
+          ? Duration(seconds: age.toInt())
+          : null,
+    );
   }
 
   static double _round(double degrees) =>
@@ -99,11 +117,14 @@ class SharePolicy {
 
   /// Whether [now] is worth telling, given [told] at [toldAt]. A new phase
   /// (start, pause, end) is told at once.
+  /// Paused or ended, once told, nothing more goes out until the phase
+  /// changes: the group keeps the last point (D-037).
   bool due(Shared now, Shared? told, DateTime toldAt, DateTime at) {
     if (told == null) return true;
     final since = at.difference(toldAt);
     if (since < atLeast) return false;
     if (now.phase != told.phase) return true;
+    if (now.phase != JourneyPhase.recording) return false;
     if (since >= every) return true;
     final (a, b) = (now.fix, told.fix);
     if (a == null || b == null) return a != b;

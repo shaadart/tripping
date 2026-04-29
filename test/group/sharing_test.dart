@@ -42,6 +42,15 @@ void main() {
     expect(back.fix!.time, t0);
   });
 
+  test('a message dates its fix by its age when sent', () {
+    final message = shared(
+      JourneyPhase.recording,
+      fixAt(0, 0),
+    ).toMessage(at: t0.add(const Duration(seconds: 12)));
+    expect(message['o'], 12);
+    expect(Shared.fromMessage(message)!.fixAge, const Duration(seconds: 12));
+  });
+
   test('a message without a position says so; nonsense is refused', () {
     final message = shared(JourneyPhase.recording, null).toMessage();
     expect(message.containsKey('p'), isFalse);
@@ -89,6 +98,18 @@ void main() {
         policy.due(far, told, t0, t0.add(const Duration(seconds: 2))),
         isFalse,
         reason: 'the relay refuses writes closer than 2 s',
+      );
+    });
+
+    test('paused or ended: once, then silence until the phase changes', () {
+      final paused = shared(JourneyPhase.paused, fixAt(3, 0));
+      final later = t0.add(const Duration(minutes: 20));
+      expect(policy.due(paused, paused, t0, later), isFalse);
+      final ended = shared(JourneyPhase.ended, fixAt(3, 0));
+      expect(policy.due(ended, ended, t0, later), isFalse);
+      expect(
+        policy.due(told, paused, t0, t0.add(const Duration(seconds: 3))),
+        isTrue,
       );
     });
 

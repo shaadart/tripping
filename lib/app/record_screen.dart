@@ -437,9 +437,7 @@ class _RecordScreenState extends State<RecordScreen>
       // A journey in a group has ended: say so, and the inviter's ending
       // ends the group (D-037).
       unawaited(
-        journey == null && was != null
-            ? group.finish(endGroup: was.role == GroupRole.creator)
-            : group.follow(null),
+        journey == null && was != null ? group.finish() : group.follow(null),
       );
     }
     if (journey == null) return;
@@ -482,44 +480,34 @@ class _RecordScreenState extends State<RecordScreen>
     );
   }
 
-  /// Leaves the group (a member) or ends it for everyone (the inviter);
-  /// the journey goes on.
+  /// Leaves the group, inviter or not: this phone stops sharing, the group
+  /// and the journey go on (D-037).
   Future<void> _leaveGroup() async {
     final membership = _membership;
     final store = widget.waypoints;
     if (membership == null || store == null) return;
-    final inviter = membership.role == GroupRole.creator;
-    final ended = widget.group?.status.value?.ended ?? false;
-    final sure = ended
-        ? true
-        : await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: Text(inviter ? 'End the group?' : 'Leave the group?'),
-              content: Text(
-                inviter
-                    ? 'Everyone stops sharing with this group. Your journey '
-                          'goes on.'
-                    : 'You stop sharing your position with the group. Your '
-                          'journey goes on.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Stay'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: Text(inviter ? 'End group' : 'Leave'),
-                ),
-              ],
-            ),
-          );
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave the group?'),
+        content: const Text(
+          'You stop sharing your position with the group. The group and '
+          'your journey go on.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
     if (!(sure ?? false)) return;
-    final group = widget.group;
-    if (group != null) {
-      await (inviter && !ended ? group.endGroup() : group.leave());
-    }
+    await widget.group?.leave();
     await store.deleteMembership(membership.journeyId);
   }
 
@@ -1425,7 +1413,13 @@ class _GroupLine extends StatelessWidget {
           null => 'Not connected: positions are not shared',
           GroupStatus(:final problem?) => problem,
           GroupStatus(ended: true) =>
-            '${host ?? 'The inviter'} ended the group: nothing is shared now',
+            'This group was closed: nothing is shared now',
+          GroupStatus(refused: true) =>
+            "The group isn't accepting this phone's updates: leave and "
+                'join again',
+          GroupStatus(connected: false, :final offlineSince?) =>
+            'Offline since ${timeOfDay(context, offlineSince)} · sharing '
+                'resumes when the connection returns',
           GroupStatus(connected: false) =>
             "Not connected: the group can't see this phone now",
           GroupStatus(connected: true) =>
@@ -1459,10 +1453,7 @@ class _GroupLine extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               TextButton(onPressed: onInvite, child: const Text('Invite')),
-              TextButton(
-                onPressed: onLeave,
-                child: Text(inviter ? 'End group' : 'Leave group'),
-              ),
+              TextButton(onPressed: onLeave, child: const Text('Leave group')),
             ],
           ),
         ],
@@ -1488,7 +1479,7 @@ class _GroupLine extends StatelessWidget {
         style: muted,
       );
     }
-    final old = _atLeastZero(now.difference(fix.time));
+    final old = _atLeastZero(now.difference(companion.positionAt ?? fix.time));
     final freshness = freshnessOf(old, shared.mode);
     return Text(
       [

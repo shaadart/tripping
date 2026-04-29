@@ -148,10 +148,6 @@ class _FirebaseRoom implements RelayRoom {
   }
 
   @override
-  Future<void> end() =>
-      _ref.child('meta').update({'closed': ServerValue.timestamp});
-
-  @override
   Future<void> leave() async {
     await _ref.child('presence/$_uid').remove();
     await _ref.child('members/$_uid').remove();

@@ -9,7 +9,6 @@ class FakeRelay implements Relay, RelayRoom {
   final changes = StreamController<List<RelayEntry>>.broadcast();
   final published = <(int, String)>[];
   final endings = StreamController<bool>.broadcast();
-  var endedByMe = 0;
   var left = 0;
   final opened = <(String, bool)>[];
   var reachable = false;
@@ -32,23 +31,27 @@ class FakeRelay implements Relay, RelayRoom {
     yield* connection.stream;
   }
 
+  /// The relay's clock minus this phone's.
+  Duration offset = const Duration(seconds: 2);
+
   @override
-  Duration get clockOffset => const Duration(seconds: 2);
+  Duration get clockOffset => offset;
 
   @override
   Stream<List<RelayEntry>> get entries => changes.stream;
 
+  /// Makes the relay refuse writes, as its rules would.
+  var refusing = false;
+
   @override
   Future<void> publish(int seq, String box) async {
     if (!reachable) throw StateError('would have been queued');
+    if (refusing) throw StateError('permission denied');
     published.add((seq, box));
   }
 
   @override
   Stream<bool> get ended => endings.stream;
-
-  @override
-  Future<void> end() async => endedByMe++;
 
   @override
   Future<void> leave() async => left++;

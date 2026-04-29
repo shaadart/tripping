@@ -288,7 +288,7 @@ Map<String, Object> companionFeatures(
       :final mode,
     ) when phase != JourneyPhase.ended)
       () {
-        final old = now.difference(fix.time);
+        final old = now.difference(companion.positionAt ?? fix.time);
         final freshness = freshnessOf(
           old.isNegative ? Duration.zero : old,
           mode,

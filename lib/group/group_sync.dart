@@ -25,6 +25,16 @@ class Companion {
   final Shared shared;
 
   String get name => shared.name;
+
+  /// When their position was taken, on this phone's clock: the relay's
+  /// receipt less its age when sent, so neither phone's clock error
+  /// matters (G4). Null without a position.
+  DateTime? get positionAt {
+    final fix = shared.fix;
+    if (fix == null) return null;
+    final age = shared.fixAge;
+    return age == null ? fix.time : heardAt.subtract(age);
+  }
 }
 
 /// What the screen may say about the group: reachable or not, who was heard
@@ -36,6 +46,8 @@ class GroupStatus {
     this.ended = false,
     this.companions = const [],
     this.problem,
+    this.offlineSince,
+    this.refused = false,
   });
 
   /// The relay is reachable now.
@@ -50,6 +62,13 @@ class GroupStatus {
 
   /// Why group sharing cannot work at all here.
   final String? problem;
+
+  /// Since when the relay has been out of reach (this phone's clock).
+  final DateTime? offlineSince;
+
+  /// The relay keeps refusing this phone's updates (it may have been
+  /// removed, or the group closed).
+  final bool refused;
 }
 
 /// Shares this phone's journey with its group (G2, G3): joins the room,
@@ -84,6 +103,14 @@ class GroupSync {
   var _generation = 0;
   Shared? _mine;
   Shared? _told;
+  var _refusals = 0;
+
+  /// Each companion's newest genuine entry.
+  final _heard = <String, ({int seq, DateTime at, Companion companion})>{};
+
+  /// Boxes larger than this are not even opened (the relay's rules allow
+  /// 1,024 characters).
+  static const maxBox = 1024;
   DateTime? _toldAt;
   Future<void>? _telling;
 
@@ -121,7 +148,12 @@ class GroupSync {
         ..add(
           room.connected.listen((connected) {
             _connected = connected;
-            _set(connected: connected);
+            final since = status.value?.offlineSince;
+            _set(
+              connected: connected,
+              offlineSince: connected ? null : since ?? _clock(),
+              clearOffline: connected,
+            );
             if (connected) {
               // Whatever was said before may not have arrived: say it now.
               _told = null;
@@ -137,23 +169,39 @@ class GroupSync {
         )
         ..add(
           room.entries.listen((entries) async {
-            final companions = <Companion>[];
             for (final entry in entries) {
               if (entry.participant == me) continue;
+              // Duplicates and anything older than what is shown change
+              // nothing (invariant 9).
+              final known = _heard[entry.participant];
+              if (known != null &&
+                  (entry.at.isBefore(known.at) ||
+                      (entry.at == known.at && entry.seq <= known.seq))) {
+                continue;
+              }
+              if (entry.box.length > maxBox) continue;
               final message = await keys.open(entry.box, entry.participant);
               final shared = message == null
                   ? null
                   : Shared.fromMessage(message);
+              // A damaged entry leaves the last good one in place.
               if (shared == null) continue;
-              companions.add(
-                Companion(
+              _heard[entry.participant] = (
+                seq: entry.seq,
+                at: entry.at,
+                companion: Companion(
                   participant: entry.participant,
                   heardAt: entry.at.subtract(room.clockOffset),
                   shared: shared,
                 ),
               );
             }
-            companions.sort((a, b) => b.heardAt.compareTo(a.heardAt));
+            final present = {for (final e in entries) e.participant};
+            _heard.removeWhere(
+              (participant, _) => !present.contains(participant),
+            );
+            final companions = [for (final h in _heard.values) h.companion]
+              ..sort((a, b) => b.heardAt.compareTo(a.heardAt));
             if (generation == _generation) {
               _set(heard: true, companions: companions);
             }
@@ -184,11 +232,20 @@ class GroupSync {
     }
     final telling = () async {
       try {
-        await room.publish(++_seq, await keys.seal(mine.toMessage(), me));
+        await room.publish(
+          ++_seq,
+          await keys.seal(mine.toMessage(at: now), me),
+        );
         _told = mine;
         _toldAt = now;
+        if (_refusals > 0) {
+          _refusals = 0;
+          _set(refused: false);
+        }
       } on Object {
-        // Tried again on the next tick; nothing is queued.
+        // Tried again on the next tick; nothing is queued. Refused again
+        // and again while reachable: say so.
+        if (_connected && ++_refusals >= 3) _set(refused: true);
       }
     }();
     _telling = telling;
@@ -196,9 +253,9 @@ class GroupSync {
     _telling = null;
   }
 
-  /// The journey ended: says so (if the relay is reachable) and, for the
-  /// inviter, ends the group for everyone.
-  Future<void> finish({required bool endGroup}) async {
+  /// The journey ended: says so once, if the relay is reachable, then
+  /// shares nothing more. The group goes on without this phone (D-037).
+  Future<void> finish() async {
     final mine = _mine;
     if (mine != null) {
       _mine = Shared(
@@ -208,23 +265,6 @@ class GroupSync {
         fix: mine.fix,
       );
       await _tell(force: true);
-    }
-    if (endGroup && _connected) {
-      try {
-        await _room?.end();
-      } on Object {
-        // Offline: the group stays until its members leave.
-      }
-    }
-    await stop();
-  }
-
-  /// Ends the group for everyone (its inviter), the journey going on.
-  Future<void> endGroup() async {
-    try {
-      await _room?.end();
-    } on Object {
-      // Offline: the group stays until its members leave.
     }
     await stop();
   }
@@ -243,15 +283,20 @@ class GroupSync {
     bool? connected,
     bool? heard,
     bool? ended,
+    bool? refused,
     List<Companion>? companions,
+    DateTime? offlineSince,
+    bool clearOffline = false,
   }) {
     final now = status.value ?? const GroupStatus();
     status.value = GroupStatus(
       connected: connected ?? now.connected,
       heard: heard ?? now.heard,
       ended: ended ?? now.ended,
+      refused: refused ?? now.refused,
       companions: companions ?? now.companions,
       problem: now.problem,
+      offlineSince: clearOffline ? null : offlineSince ?? now.offlineSince,
     );
   }
 
@@ -276,6 +321,8 @@ class GroupSync {
     _secret = null;
     _told = null;
     _toldAt = null;
+    _refusals = 0;
+    _heard.clear();
     _connected = false;
     _ended = false;
     status.value = null;
