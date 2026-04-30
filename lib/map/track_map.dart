@@ -5,6 +5,8 @@ import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../places/polyline.dart';
 import 'map_style.dart';
+import 'map_symbols.dart';
+import 'map_key.dart';
 import 'track_geometry.dart';
 
 /// A past journey on the map: its track, one line per segment, with where it
@@ -52,6 +54,7 @@ class _TrackMapState extends State<TrackMap> {
 
   void _onStyleLoaded() {
     _styleLoaded = true;
+    _drawing = false;
     _draw();
   }
 
@@ -61,8 +64,8 @@ class _TrackMapState extends State<TrackMap> {
     if (!mounted || map == null || track == null || !_styleLoaded) return;
     if (_drawing) return;
     _drawing = true;
-    final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
-    final line = trackLine(context);
+    await registerMapSymbols(map, context);
+    if (!mounted) return;
     final route = widget.route;
     final geometry = route?.geometry;
     final way = geometry == null
@@ -75,32 +78,11 @@ class _TrackMapState extends State<TrackMap> {
       await addRouteLayers(map, context, 'route');
     }
     await map.addGeoJsonSource('track', trackFeatures(track));
-    await map.addLineLayer('track', 'track-line', line);
+    if (!mounted) return;
+    await addRecordedLayers(map, context, ['track']);
     await map.addGeoJsonSource('ends', endsFeatures(track));
-    await map.addCircleLayer(
-      'ends',
-      'ends',
-      CircleLayerProperties(
-        circleRadius: 7,
-        // Start: white ringed in ember; finish: solid ember. Green is
-        // kept for waypoints marked on the way.
-        circleColor: [
-          'match',
-          ['get', 'end'],
-          'start',
-          '#FFFFFF',
-          ember,
-        ],
-        circleStrokeColor: [
-          'match',
-          ['get', 'end'],
-          'start',
-          ember,
-          '#FFFFFF',
-        ],
-        circleStrokeWidth: 3,
-      ),
-    );
+    if (!mounted) return;
+    await addEndLayers(map, context, 'ends');
     await map.addGeoJsonSource('waypoints', waypointFeatures(widget.waypoints));
     if (!mounted) return;
     await addWaypointLayers(map, context, 'waypoints');
@@ -138,6 +120,7 @@ class _TrackMapState extends State<TrackMap> {
           rotateGesturesEnabled: false,
           attributionButtonPosition: AttributionButtonPosition.bottomRight,
         ),
+        const Positioned(top: 12, right: 12, child: MapKeyButton()),
         if (!_drawn)
           Positioned.fill(
             child: ColoredBox(

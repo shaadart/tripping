@@ -5,6 +5,7 @@ import '../app/theme.dart';
 import '../app/identity_marker.dart';
 import '../journey/journey.dart';
 import 'map_tiles.dart';
+import 'map_symbols.dart';
 import 'track_geometry.dart';
 
 /// The bundled basemap style for the current look. Bundled, so the map and
@@ -16,10 +17,65 @@ String mapStyleFor(BuildContext context) =>
 
 /// How every recorded track is drawn in the current look.
 LineLayerProperties trackLine(BuildContext context) => LineLayerProperties(
-  lineColor: Theme.of(context).colorScheme.primary.toHexStringRGB(),
+  lineColor: MapVisuals(context).recorded.toHexStringRGB(),
   lineWidth: lookOf(context).trackWidth,
   lineCap: 'round',
   lineJoin: 'round',
+);
+
+/// All casings go under all ink, so a recent tail cannot erase older ground
+/// at a crossing. The route remains visible beside a coincident narrow track.
+Future<void> addRecordedLayers(
+  MapLibreMapController map,
+  BuildContext context,
+  List<String> sources,
+) async {
+  final visuals = MapVisuals(context);
+  final ink = trackLine(context);
+  for (final source in sources) {
+    await map.addLineLayer(
+      source,
+      '$source-casing',
+      LineLayerProperties(
+        lineColor: visuals.ground.toHexStringRGB(),
+        lineWidth: visuals.trackCasingWidth,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+    );
+  }
+  for (final source in sources) {
+    await map.addLineLayer(source, '$source-line', ink);
+  }
+}
+
+/// The accuracy disc is ground context, below routes and every place marker.
+Future<void> addAccuracyLayer(
+  MapLibreMapController map,
+  BuildContext context,
+  String source,
+) => map.addCircleLayer(
+  source,
+  'accuracy',
+  CircleLayerProperties(
+    circleRadius: groundRadius,
+    circleColor: [
+      'case',
+      ['get', 'stale'],
+      '#8A8378',
+      MapVisuals(context).recorded.toHexStringRGB(),
+    ],
+    circleOpacity: 0.10,
+    circleStrokeColor: [
+      'case',
+      ['get', 'stale'],
+      '#8A8378',
+      MapVisuals(context).recorded.toHexStringRGB(),
+    ],
+    circleStrokeWidth: 1,
+    circleStrokeOpacity: 0.4,
+    circlePitchAlignment: 'map',
+  ),
 );
 
 /// Moves the camera to show all of [track]. A track smaller than a few
@@ -55,39 +111,66 @@ Future<void> fitCamera(
   );
 }
 
-/// A planned way on [source] (see [routeFeatures]): a road is a broad
-/// river line; a straight line is thin and dashed, because it is not a
-/// road. Add it before the track, so the track shows where the journey
-/// really went.
+/// A broad directional corridor under the recorded line. Direction-only
+/// geometry stays thin and dotted; it is never decorated as a traversable way.
 Future<void> addRouteLayers(
   MapLibreMapController map,
   BuildContext context,
   String source,
 ) async {
-  final river = Theme.of(context).colorScheme.secondary.toHexStringRGB();
+  final v = MapVisuals(context);
+  final iconScale = identityMapIconScale(context);
+  final road = [
+    '==',
+    ['get', 'kind'],
+    RouteKind.road.name,
+  ];
+  await map.addLineLayer(
+    source,
+    '$source-casing',
+    LineLayerProperties(
+      lineColor: v.ground.toHexStringRGB(),
+      lineWidth: v.routeWidth + 3,
+      lineCap: 'round',
+      lineJoin: 'round',
+    ),
+    filter: road,
+  );
   await map.addLineLayer(
     source,
     '$source-road',
     LineLayerProperties(
-      lineColor: river,
-      lineWidth: 6,
-      lineOpacity: 0.75,
+      lineColor: v.route.toHexStringRGB(),
+      lineWidth: v.routeWidth,
       lineCap: 'round',
       lineJoin: 'round',
     ),
-    filter: [
-      '==',
-      ['get', 'kind'],
-      RouteKind.road.name,
-    ],
+    filter: road,
+  );
+  await map.addSymbolLayer(
+    source,
+    '$source-direction',
+    SymbolLayerProperties(
+      symbolPlacement: 'line',
+      symbolSpacing: 130,
+      iconImage: MapSymbol.routeArrow.image,
+      iconSize: iconScale,
+      iconRotationAlignment: 'map',
+      iconPitchAlignment: 'map',
+      iconKeepUpright: false,
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+    ),
+    filter: road,
   );
   await map.addLineLayer(
     source,
     '$source-straight',
     LineLayerProperties(
-      lineColor: river,
+      lineColor: v.route.toHexStringRGB(),
       lineWidth: 3,
-      lineDasharray: [1.5, 1.5],
+      lineDasharray: [1, 2],
+      lineCap: 'round',
     ),
     filter: [
       '==',
@@ -97,32 +180,85 @@ Future<void> addRouteLayers(
   );
 }
 
-/// The destination on [source] (see [destinationFeatures]): a white dot
-/// ringed in river, with its name.
+Future<void> addEndLayers(
+  MapLibreMapController map,
+  BuildContext context,
+  String source,
+) async {
+  final iconScale = identityMapIconScale(context);
+  for (final (end, symbol) in [
+    ('start', MapSymbol.origin),
+    ('finish', MapSymbol.finish),
+  ]) {
+    await map.addSymbolLayer(
+      source,
+      '$source-$end',
+      SymbolLayerProperties(
+        iconImage: symbol.image,
+        iconSize: iconScale,
+        iconAllowOverlap: true,
+        iconIgnorePlacement: true,
+        iconPitchAlignment: 'viewport',
+        iconRotationAlignment: 'viewport',
+      ),
+      filter: [
+        '==',
+        ['get', 'end'],
+        end,
+      ],
+    );
+  }
+  if (!context.mounted) return;
+  await _addPlaceLabel(map, context, source, '$source-labels', [
+    'match',
+    ['get', 'end'],
+    'start',
+    'Start',
+    'Finish',
+  ]);
+}
+
+/// The pin's tip anchors the destination; its body sits above a recorded
+/// finish at the same coordinate, so intent and actual finish stay separate.
 Future<void> addDestinationLayers(
   MapLibreMapController map,
   BuildContext context,
   String source,
 ) async {
-  final scheme = Theme.of(context).colorScheme;
-  await map.addCircleLayer(
-    source,
-    '$source-dot',
-    CircleLayerProperties(
-      circleRadius: 8,
-      circleColor: '#FFFFFF',
-      circleStrokeColor: scheme.secondary.toHexStringRGB(),
-      circleStrokeWidth: 4,
-    ),
-  );
   await map.addSymbolLayer(
     source,
-    '$source-label',
+    '$source-pin',
     SymbolLayerProperties(
-      textField: ['get', 'name'],
+      iconImage: MapSymbol.destination.image,
+      iconSize: identityMapIconScale(context),
+      iconAnchor: 'bottom',
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+      iconPitchAlignment: 'viewport',
+      iconRotationAlignment: 'viewport',
+    ),
+  );
+  if (!context.mounted) return;
+  await _addPlaceLabel(map, context, source, '$source-label', ['get', 'name']);
+}
+
+Future<void> _addPlaceLabel(
+  MapLibreMapController map,
+  BuildContext context,
+  String source,
+  String layer,
+  Object field, {
+  double offset = 1.4,
+}) async {
+  final scheme = MapVisuals(context).scheme;
+  await map.addSymbolLayer(
+    source,
+    layer,
+    SymbolLayerProperties(
+      textField: field,
       textFont: ['Noto Sans Regular'],
-      textSize: 13,
-      textOffset: [0, 1.3],
+      textSize: lookOf(context).look == Look.highSun ? 14 : 13,
+      textOffset: [0, offset],
       textAnchor: 'top',
       textColor: scheme.onSurface.toHexStringRGB(),
       textHaloColor: scheme.surface.toHexStringRGB(),
@@ -140,7 +276,7 @@ Future<void> addCompanionLayers(
   BuildContext context,
   String source,
 ) async {
-  final scheme = Theme.of(context).colorScheme;
+  final scheme = MapVisuals(context).scheme;
   await map.addSymbolLayer(
     source,
     '$source-markers',
@@ -177,53 +313,34 @@ Future<void> addCompanionLayers(
   );
 }
 
-/// Waypoints on [source]: a solid moss dot where you were, a hollow river
-/// ring where you plan to go (nobody has been there), each with its label.
+/// Diamonds distinguish waypoints from people, endpoints and the pin.
+/// Filled = marked from a fix; open = a place chosen on the map.
 Future<void> addWaypointLayers(
   MapLibreMapController map,
   BuildContext context,
   String source,
 ) async {
-  final scheme = Theme.of(context).colorScheme;
-  final marked = scheme.tertiary.toHexStringRGB();
-  final planned = scheme.secondary.toHexStringRGB();
-  final ink = scheme.onSurface.toHexStringRGB();
-  final halo = scheme.surface.toHexStringRGB();
-  await map.addCircleLayer(
-    source,
-    '$source-dots',
-    CircleLayerProperties(
-      circleRadius: 7,
-      circleColor: [
-        'match',
-        ['get', 'kind'],
-        'marked',
-        marked,
-        'rgba(0,0,0,0)',
-      ],
-      circleStrokeColor: [
-        'match',
-        ['get', 'kind'],
-        'marked',
-        '#FFFFFF',
-        planned,
-      ],
-      circleStrokeWidth: 3,
-    ),
-  );
   await map.addSymbolLayer(
     source,
-    '$source-labels',
+    '$source-markers',
     SymbolLayerProperties(
-      textField: ['get', 'label'],
-      textFont: ['Noto Sans Regular'],
-      textSize: 13,
-      textOffset: [0, 1.2],
-      textAnchor: 'top',
-      textColor: ink,
-      textHaloColor: halo,
-      textHaloWidth: 1.5,
-      textOptional: true,
+      iconImage: [
+        'match',
+        ['get', 'kind'],
+        'marked',
+        MapSymbol.marked.image,
+        MapSymbol.planned.image,
+      ],
+      iconSize: identityMapIconScale(context),
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+      iconPitchAlignment: 'viewport',
+      iconRotationAlignment: 'viewport',
     ),
   );
+  if (!context.mounted) return;
+  await _addPlaceLabel(map, context, source, '$source-labels', [
+    'get',
+    'label',
+  ]);
 }

@@ -20,6 +20,8 @@ import '../places/place.dart';
 import '../places/polyline.dart';
 import '../routing/route_planner.dart';
 import 'map_style.dart';
+import 'map_symbols.dart';
+import 'map_key.dart';
 import 'terrain.dart';
 import 'track_geometry.dart';
 
@@ -90,6 +92,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   static const _historySource = 'track-history';
   static const _tailSource = 'track-tail';
   static const _positionSource = 'position';
+  static const _endSource = 'journey-ends';
+  Fix? _originDrawn;
   static const _waypointSource = 'waypoints';
   static const _routeSource = 'route';
   static const _destinationSource = 'destination';
@@ -172,19 +176,25 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
       final map = _map!;
       final iconScale = identityMapIconScale(context);
       _markerImages.clear();
-      final ember = Theme.of(context).colorScheme.primary.toHexStringRGB();
-      final line = trackLine(context);
+      await registerMapSymbols(map, context);
+      if (!mounted) return;
+      await map.addGeoJsonSource(_positionSource, trackFeatures(const []));
+      if (!mounted) return;
+      await addAccuracyLayer(map, context, _positionSource);
       // The planned way first, so the track drawn on top shows where the
       // journey really went.
       await map.addGeoJsonSource(_routeSource, trackFeatures(const []));
       if (!mounted) return;
       await addRouteLayers(map, context, _routeSource);
-      for (final source in [_historySource, _tailSource, _positionSource]) {
+      for (final source in [_historySource, _tailSource]) {
         await map.addGeoJsonSource(source, trackFeatures(const []));
       }
-      for (final source in [_historySource, _tailSource]) {
-        await map.addLineLayer(source, '$source-line', line);
-      }
+      if (!mounted) return;
+      await addRecordedLayers(map, context, [_historySource, _tailSource]);
+      await map.addGeoJsonSource(_endSource, endsFeatures(const []));
+      if (!mounted) return;
+      await addEndLayers(map, context, _endSource);
+      _originDrawn = null;
       // Waypoints above the track, below the position.
       await map.addGeoJsonSource(_waypointSource, waypointFeatures(const []));
       if (!mounted) return;
@@ -196,19 +206,6 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
       if (!mounted) return;
       await addCompanionLayers(map, context, _companionSource);
       _companionsDrawn = null;
-      await map.addCircleLayer(
-        _positionSource,
-        'accuracy',
-        CircleLayerProperties(
-          circleRadius: groundRadius,
-          circleColor: ember,
-          circleOpacity: 0.12,
-          circleStrokeColor: ember,
-          circleStrokeWidth: 1,
-          circleStrokeOpacity: 0.35,
-          circlePitchAlignment: 'map',
-        ),
-      );
       await map.addSymbolLayer(
         _positionSource,
         'puck',
@@ -252,6 +249,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
       _track.reset(
         journey == null ? const [] : await widget.store.track(journey.id),
       );
+      _originDrawn = null;
       _segmentStart = progress?.openSince;
       _follow = true;
       _zoomedIn = false;
@@ -262,8 +260,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
       await _fitTrack(map);
       if (journey == null) {
         // Between journeys it is a plain map again: north up and flat.
-        await map.animateCamera(CameraUpdate.bearingTo(0));
-        await map.animateCamera(CameraUpdate.tiltTo(0));
+        await _moveCamera(map, CameraUpdate.bearingTo(0));
+        await _moveCamera(map, CameraUpdate.tiltTo(0));
       }
     }
 
@@ -292,8 +290,17 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   Future<void> _drawHistory(MapLibreMapController map) =>
       map.setGeoJsonSource(_historySource, trackFeatures(_track.history));
 
-  Future<void> _drawTail(MapLibreMapController map) =>
-      map.setGeoJsonSource(_tailSource, trackFeatures([_track.tail]));
+  Future<void> _drawTail(MapLibreMapController map) async {
+    await map.setGeoJsonSource(_tailSource, trackFeatures([_track.tail]));
+    final first = _track.segments.where((s) => s.isNotEmpty).firstOrNull?.first;
+    if (first == null || first != _originDrawn) {
+      _originDrawn = first;
+      await map.setGeoJsonSource(
+        _endSource,
+        endsFeatures(_track.segments, includeFinish: false),
+      );
+    }
+  }
 
   Future<void> _drawPosition(
     MapLibreMapController map,
@@ -349,7 +356,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
     }
     final turned = _turn(bearing, _bearing) > 10;
     if (!_zoomedIn) {
-      await map.animateCamera(_followView(fix));
+      await _moveCamera(map, _followView(fix));
       _zoomedIn = true;
     } else if (previous != null &&
         fix.metersTo(previous) < _easeAbove &&
@@ -358,7 +365,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
       // renders dozens of frames per fix on a 120 Hz screen (E-015).
       await map.moveCamera(_followUpdate(fix));
     } else {
-      await map.animateCamera(_followUpdate(fix));
+      await _moveCamera(map, _followUpdate(fix));
     }
   }
 
@@ -689,13 +696,27 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  Future<void> _moveCamera(
+    MapLibreMapController map,
+    CameraUpdate update,
+  ) async {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      await map.moveCamera(update);
+    } else {
+      await map.animateCamera(
+        update,
+        duration: const Duration(milliseconds: 250),
+      );
+    }
+  }
+
   /// Back to the journey's follow view.
   void _recenter() {
     setState(() => _follow = true);
     final fix = _shownFix;
     final map = _map;
     if (fix == null || map == null) return;
-    _serially(() async => map.animateCamera(_followView(fix)));
+    _serially(() async => _moveCamera(map, _followView(fix)));
   }
 
   @override
@@ -747,8 +768,19 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
             right: 16,
             // Under the header, clear of the buttons at the bottom.
             top: MediaQuery.paddingOf(context).top + 64,
-            child: Center(child: _MapNote('Map not available here')),
+            child: Center(
+              child: _MapNote(
+                _track.lastFix == null
+                    ? 'Map not available here'
+                    : 'Map unavailable · saved journey still shown',
+              ),
+            ),
           ),
+        Positioned(
+          top: MediaQuery.paddingOf(context).top + 124,
+          right: 16,
+          child: const MapKeyButton(),
+        ),
         if (recording && !_follow && _shownFix != null)
           Positioned(
             right: 16,

@@ -204,7 +204,7 @@ class _IdentityScreenState extends State<IdentityScreen> {
                             children: [
                               for (final shape in MarkerShape.values)
                                 _VisualChoice(
-                                  label: shape.label,
+                                  label: markerShapeLabel(shape),
                                   selected: _shape == shape,
                                   width: (box.maxWidth - 24) / 4,
                                   height: 80,

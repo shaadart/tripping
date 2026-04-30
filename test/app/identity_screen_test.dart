@@ -37,8 +37,8 @@ void main() {
       );
       await tester.enterText(find.byType(TextField), 'Ravi Mehta');
       await tester.tap(find.byTooltip('River'));
-      await tester.ensureVisible(find.byTooltip('Gate'));
-      await tester.tap(find.byTooltip('Gate'));
+      await tester.ensureVisible(find.byTooltip('Rounded square'));
+      await tester.tap(find.byTooltip('Rounded square'));
       await tester.pumpAndSettle();
       expect(find.text('River · Gate'), findsNothing);
       expect(find.byType(IdentityMarker), findsNWidgets(5));
@@ -82,11 +82,11 @@ void main() {
           ),
         ),
       );
-      await tester.ensureVisible(find.byTooltip('Gate'));
+      await tester.ensureVisible(find.byTooltip('Rounded square'));
       await tester.pumpAndSettle();
       for (final label in [
         ...IdentityColour.values.map((c) => c.label),
-        ...MarkerShape.values.map((s) => s.label),
+        ...MarkerShape.values.map(markerShapeLabel),
       ]) {
         final target = tester.getSize(find.byTooltip(label));
         expect(target.width, greaterThanOrEqualTo(64));
@@ -179,7 +179,7 @@ void main() {
                                       ),
                                       size: 72,
                                     ),
-                                    Text(shape.label),
+                                    Text(markerShapeLabel(shape)),
                                     IdentityMarker(
                                       identity: MapIdentity(
                                         name: 'Ravi',

@@ -445,8 +445,8 @@ void main() {
       await tester.tap(find.byTooltip('Your map identity'));
       await frames(tester);
       await tester.enterText(find.byType(TextField), 'Ravi Mehta');
-      await tester.ensureVisible(find.byTooltip('Gate'));
-      await tester.tap(find.byTooltip('Gate'));
+      await tester.ensureVisible(find.byTooltip('Rounded square'));
+      await tester.tap(find.byTooltip('Rounded square'));
       await tester.ensureVisible(find.text('Save'));
       await tapReal(tester, 'Save');
       expect(settings.identity.value.shape.name, 'gate');

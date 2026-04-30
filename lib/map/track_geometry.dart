@@ -204,9 +204,14 @@ class TrackBuffer {
 
 /// Where the journey began and where it ended, as points with an `end`
 /// property of `start` or `finish`.
-Map<String, Object> endsFeatures(List<List<Fix>> track) {
-  final fixes = [for (final segment in track) ...segment];
-  if (fixes.isEmpty) return _collection(const []);
+Map<String, Object> endsFeatures(
+  List<List<Fix>> track, {
+  bool includeFinish = true,
+}) {
+  final nonempty = track.where((segment) => segment.isNotEmpty);
+  final first = nonempty.firstOrNull?.first;
+  if (first == null) return _collection(const []);
+  final last = nonempty.last.last;
   Map<String, Object> point(Fix fix, String end) => {
     'type': 'Feature',
     'properties': {'end': end},
@@ -216,8 +221,8 @@ Map<String, Object> endsFeatures(List<List<Fix>> track) {
     },
   };
   return _collection([
-    point(fixes.first, 'start'),
-    if (fixes.length > 1) point(fixes.last, 'finish'),
+    point(first, 'start'),
+    if (includeFinish && last != first) point(last, 'finish'),
   ]);
 }
 

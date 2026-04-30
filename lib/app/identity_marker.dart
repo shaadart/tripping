@@ -1,10 +1,18 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../group/identity.dart';
+
+/// Legacy wire/storage identifiers stay stable; presentation is familiar
+/// rounded geometry, with no historical motif or data migration.
+String markerShapeLabel(MarkerShape shape) => switch (shape) {
+  MarkerShape.rosette => 'Circle',
+  MarkerShape.reed => 'Diamond',
+  MarkerShape.gate => 'Rounded square',
+  MarkerShape.tablet => 'Triangle',
+};
 
 /// Native plugins assign screen density to decoded image bytes. The PNG is
 /// rendered at 3x; compensate for the device density to keep it 44 logical px.
@@ -27,7 +35,8 @@ class IdentityMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     image: true,
-    label: '${identity.description}${hollow ? ', last known' : ''}',
+    label:
+        '${identity.displayName}, ${identity.colour.label}, ${markerShapeLabel(identity.shape)}${hollow ? ', last known' : ''}',
     child: SizedBox.square(
       dimension: size,
       child: CustomPaint(
@@ -68,42 +77,27 @@ class _MarkerPainter extends CustomPainter {
     var path = Path();
     switch (identity.shape) {
       case MarkerShape.rosette:
-        path = _softPolygon([
-          for (var i = 0; i < 16; i++)
-            Offset(
-              22 +
-                  math.cos(-math.pi / 2 + i * math.pi / 8) *
-                      (i.isEven ? 18 : 15),
-              22 +
-                  math.sin(-math.pi / 2 + i * math.pi / 8) *
-                      (i.isEven ? 18 : 15),
-            ),
-        ]);
+        path.addOval(const Rect.fromLTWH(5, 5, 34, 34));
       case MarkerShape.reed:
-        path.moveTo(7, 31);
-        path.cubicTo(7, 16, 19, 7, 33, 6);
-        path.quadraticBezierTo(37, 6, 37, 10);
-        path.cubicTo(36, 26, 25, 37, 10, 37);
-        path.quadraticBezierTo(6, 37, 7, 31);
-        path.close();
-      case MarkerShape.gate:
         path = _softPolygon(const [
-          Offset(6, 37),
-          Offset(6, 17),
-          Offset(12, 17),
-          Offset(12, 7),
-          Offset(32, 7),
-          Offset(32, 17),
-          Offset(38, 17),
-          Offset(38, 37),
+          Offset(22, 2),
+          Offset(42, 22),
+          Offset(22, 42),
+          Offset(2, 22),
         ]);
-      case MarkerShape.tablet:
+      case MarkerShape.gate:
         path.addRRect(
           RRect.fromRectAndRadius(
-            const Rect.fromLTWH(8, 5, 28, 34),
-            const Radius.circular(11),
+            const Rect.fromLTWH(5, 5, 34, 34),
+            const Radius.circular(10),
           ),
         );
+      case MarkerShape.tablet:
+        path = _softPolygon(const [
+          Offset(22, 0),
+          Offset(44, 40),
+          Offset(0, 40),
+        ]);
     }
     // Solid pigment, no white casing. Neutral outline belongs only to the
     // existing last-known treatment, never to a live identity.
@@ -127,25 +121,31 @@ class _MarkerPainter extends CustomPainter {
       canvas.restore();
       return;
     }
+    final triangle = identity.shape == MarkerShape.tablet;
+    final centerY = triangle ? 25.0 : 22.0;
+    final maxTextWidth = triangle ? 20.0 : 22.0;
     final text = TextPainter(
       text: TextSpan(
         text: identity.initials,
         style: TextStyle(
           color: hollow ? const Color(0xFF45413A) : Colors.white,
-          fontSize: 13,
+          fontSize: triangle ? 12 : 13,
           fontWeight: FontWeight.w600,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    if (text.width > 22) {
+    if (text.width > maxTextWidth) {
       canvas.save();
-      canvas.translate(22, 22);
-      canvas.scale(22 / text.width);
+      canvas.translate(22, centerY);
+      canvas.scale(maxTextWidth / text.width);
       text.paint(canvas, Offset(-text.width / 2, -text.height / 2));
       canvas.restore();
     } else {
-      text.paint(canvas, Offset((44 - text.width) / 2, (44 - text.height) / 2));
+      text.paint(
+        canvas,
+        Offset((44 - text.width) / 2, centerY - text.height / 2),
+      );
     }
     text.dispose();
     canvas.restore();
