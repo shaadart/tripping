@@ -26,6 +26,9 @@ Commands: `road`, `expedition`, `light`, `dark`, `sun`, `precise`, `approximate`
 `history` (ends the selected synthetic journey), `straight`, `pause`,
 `largeText`, `offline`, `end`. `precise`/`approximate` deliver one synthetic fix;
 they are not a continuous native location feed. Ages continue to advance.
+Allow the map and overlays to appear after each view-changing command before
+sending the next. Back-to-back replacements exposed a MapLibre annotation
+initialization `MAP_NOT_READY` race; record it separately from rendering checks.
 
 The default curving park journey is for ordinary-use review. Use `stress` to
 inspect shared route/track sections, a self-crossing, out-and-back ground and
