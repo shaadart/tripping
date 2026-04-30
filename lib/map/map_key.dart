@@ -15,17 +15,20 @@ class MapKeyButton extends StatelessWidget {
     ),
     tooltip: 'Map symbols',
     icon: const Icon(Icons.layers_outlined),
-    onPressed: () => showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * .85,
-      ),
-      builder: (_) => const _MapKey(),
-    ),
+    onPressed: () => showMapKey(context),
   );
 }
+
+Future<void> showMapKey(BuildContext context) => showModalBottomSheet<void>(
+  context: context,
+  backgroundColor: Theme.of(context).colorScheme.surface,
+  showDragHandle: true,
+  isScrollControlled: true,
+  constraints: BoxConstraints(
+    maxHeight: MediaQuery.sizeOf(context).height * .85,
+  ),
+  builder: (_) => const _MapKey(),
+);
 
 class _MapKey extends StatelessWidget {
   const _MapKey();
@@ -35,57 +38,71 @@ class _MapKey extends StatelessWidget {
     top: false,
     child: SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('On your map', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          const _KeyRow(
-            sample: _LineSample(route: true),
-            title: 'Planned way',
-            detail: 'Arrows point towards the destination.',
-          ),
-          const _KeyRow(
-            sample: _LineSample(),
-            title: 'Recorded ground',
-            detail: 'Gaps are places we did not record.',
-          ),
-          const _KeyRow(
-            sample: _LineSample(straight: true),
-            title: 'Direction only',
-            detail: 'A straight line, not a road or path.',
-          ),
-          const _KeyRow(
-            sample: MapSymbolGlyph(MapSymbol.origin),
-            title: 'Start',
-          ),
-          const _KeyRow(
-            sample: MapSymbolGlyph(MapSymbol.destination),
-            title: 'Destination',
-            detail: 'Where you intend to go.',
-          ),
-          const _KeyRow(
-            sample: MapSymbolGlyph(MapSymbol.finish),
-            title: 'Recorded finish',
-            detail: 'Where recording ended, even if you did not arrive.',
-          ),
-          const _KeyRow(
-            sample: MapSymbolGlyph(MapSymbol.marked),
-            title: 'Marked here',
-            detail: 'A point saved from your position.',
-          ),
-          const _KeyRow(
-            sample: MapSymbolGlyph(MapSymbol.planned),
-            title: 'Planned point',
-            detail: 'A place chosen on the map.',
-          ),
-          const _KeyRow(
-            sample: Icon(Icons.gps_not_fixed, size: 30),
-            title: 'GPS uncertainty',
-            detail:
-                'The shaded area is the reported accuracy, not a boundary. A neutral marker is last known or approximate.',
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final columns = MediaQuery.textScalerOf(context).scale(14) > 22
+              ? 1
+              : 2;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final (index, tile) in <Widget>[
+                const _KeyRow(
+                  sample: _LineSample(route: true),
+                  title: 'Planned way',
+                  detail: 'Arrows point towards the destination.',
+                ),
+                const _KeyRow(
+                  sample: _LineSample(),
+                  title: 'Your track',
+                  detail: 'Gaps are places we did not record.',
+                ),
+                const _KeyRow(
+                  sample: _LineSample(straight: true),
+                  title: 'Direction only',
+                  detail: 'A straight line, not a road or path.',
+                ),
+                const _KeyRow(
+                  sample: MapSymbolGlyph(MapSymbol.origin),
+                  title: 'Start',
+                ),
+                const _KeyRow(
+                  sample: MapSymbolGlyph(MapSymbol.destination),
+                  title: 'Destination',
+                  detail: 'Where you intend to go.',
+                ),
+                const _KeyRow(
+                  sample: MapSymbolGlyph(MapSymbol.finish),
+                  title: 'Finish',
+                  detail: 'Where recording ended, even if you did not arrive.',
+                ),
+                const _KeyRow(
+                  sample: MapSymbolGlyph(MapSymbol.marked),
+                  title: 'Marked here',
+                  detail: 'A point saved from your position.',
+                ),
+                const _KeyRow(
+                  sample: MapSymbolGlyph(MapSymbol.planned),
+                  title: 'Planned point',
+                  detail: 'A place chosen on the map.',
+                ),
+                const _KeyRow(
+                  sample: _AccuracySample(),
+                  title: 'GPS uncertainty',
+                  detail:
+                      'The shaded area is the reported accuracy, not a boundary. A neutral marker is last known or approximate.',
+                ),
+              ].indexed)
+                SizedBox(
+                  width: index == 8
+                      ? box.maxWidth
+                      : (box.maxWidth - 12 * (columns - 1)) / columns,
+                  child: tile,
+                ),
+            ],
+          );
+        },
       ),
     ),
   );
@@ -98,30 +115,31 @@ class _KeyRow extends StatelessWidget {
   final String? detail;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 10),
-    child: Row(
-      children: [
-        ExcludeSemantics(
-          child: SizedBox(width: 56, child: Center(child: sample)),
+  Widget build(BuildContext context) => Semantics(
+    label: detail == null ? title : '$title. $detail',
+    excludeSemantics: true,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            SizedBox(height: 48, child: Center(child: sample)),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              if (detail != null)
-                Text(
-                  detail!,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
+      ),
     ),
   );
 }
@@ -139,6 +157,25 @@ class _LineSample extends StatelessWidget {
       painter: _LinePainter(MapVisuals(context), route, straight),
     ),
   );
+}
+
+class _AccuracySample extends StatelessWidget {
+  const _AccuracySample();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = MapVisuals(context).recorded;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: .10),
+        border: Border.all(color: color.withValues(alpha: .4)),
+      ),
+      child: Icon(Icons.circle, size: 10, color: color),
+    );
+  }
 }
 
 class _LinePainter extends CustomPainter {

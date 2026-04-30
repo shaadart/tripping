@@ -39,6 +39,17 @@ void main() {
       await recorder.settled();
     });
     await tester.pump();
+    final closed = find.descendant(
+      of: find.byTooltip('Journey details'),
+      matching: find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.expanded == false,
+      ),
+    );
+    if (closed.evaluate().isNotEmpty &&
+        find.byTooltip('Journey details').hitTestable().evaluate().isNotEmpty) {
+      await tester.tap(find.byTooltip('Journey details'));
+      await tester.pump();
+    }
   }
 
   Future<void> show(WidgetTester tester) async {
@@ -52,7 +63,7 @@ void main() {
           recorder: recorder,
           location: location,
           system: system,
-          mapBuilder: (_, _) => const SizedBox.expand(),
+          mapBuilder: (_, _) => const SizedBox.expand(key: Key('journey-map')),
           waypoints: store,
           historyBuilder: (_) => const Scaffold(body: Text('History here')),
           savedOffline: savedOffline,
@@ -76,6 +87,42 @@ void main() {
 
   Future<void> tap(WidgetTester tester, String label) =>
       act(tester, () async => tester.tap(find.text(label)));
+
+  testWidgets(
+    'compact journey panel gives the map room and expands without changing recording',
+    (tester) async {
+      await show(tester);
+      await tester.runAsync(() async {
+        await recorder.start(JourneyMode.expedition);
+        await recorder.settled();
+      });
+      await tester.pump();
+      await tester.runAsync(() async {
+        location.emit(walkFix(0));
+        await recorder.settled();
+      });
+      await tester.pump();
+      final map = find.byKey(const Key('journey-map'));
+      final compactHeight = tester.getSize(map).height;
+      expect(
+        compactHeight,
+        greaterThan(
+          tester.view.physicalSize.height / tester.view.devicePixelRatio * .5,
+        ),
+      );
+      expect(find.text('Show coordinates'), findsNothing);
+      expect(find.text('Pause'), findsOneWidget);
+      final before = (recorder.state as Recording).journey.uuid;
+      final requests = location.requests;
+      await tester.tap(find.byTooltip('Journey details'));
+      await tester.pump();
+      expect(tester.getSize(map).height, lessThan(compactHeight));
+      expect(find.text('Show coordinates'), findsOneWidget);
+      expect((recorder.state as Recording).journey.uuid, before);
+      expect(location.requests, requests);
+      await cleanUp(tester);
+    },
+  );
 
   testWidgets('the sun button asks for the high-sun look', (tester) async {
     sunToggles = 0;
@@ -155,7 +202,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tap(tester, 'Expedition');
-    await tester.tap(find.byTooltip('Offline maps'));
+    await tester.tap(find.byTooltip('Map options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Offline maps'));
     await tester.pumpAndSettle();
     expect(find.text('Offline maps here'), findsOneWidget);
     await cleanUp(tester);
@@ -191,7 +240,7 @@ void main() {
     location.access = LocationAccess.granted;
     await tap(tester, 'Allow location');
     expect(location.requests, 2);
-    expect(find.text('Recording · Expedition'), findsOneWidget);
+    expect(find.text('Recording'), findsOneWidget);
     await cleanUp(tester);
   });
 
@@ -226,7 +275,7 @@ void main() {
   ) async {
     await show(tester);
     await tap(tester, 'Expedition');
-    expect(find.text('Recording · Expedition'), findsOneWidget);
+    expect(find.text('Recording'), findsOneWidget);
     expect(find.text('Waiting for GPS…'), findsOneWidget);
 
     await act(tester, () async => location.emit(walkFix(0)));
@@ -246,13 +295,16 @@ void main() {
           return store.waypointsOf(journey!.id);
         }))!;
 
-    Finder markButton() => find.widgetWithText(FloatingActionButton, 'Mark');
+    Finder markButton() => find.ancestor(
+      of: find.text('Mark'),
+      matching: find.byWidgetPredicate((w) => w is TextButton),
+    );
 
     testWidgets('mark saves the fix at once, then names it', (tester) async {
       await show(tester);
       await tap(tester, 'Expedition');
       expect(
-        tester.widget<FloatingActionButton>(markButton()).onPressed,
+        tester.widget<TextButton>(markButton()).onPressed,
         isNull,
         reason: 'nothing to mark before the first fix',
       );
@@ -450,14 +502,14 @@ void main() {
     await tap(tester, 'Road journey');
 
     await tap(tester, 'Pause');
-    expect(find.text('Paused · Road journey'), findsOneWidget);
+    expect(find.text('Paused'), findsOneWidget);
     await tap(tester, 'Resume');
-    expect(find.text('Recording · Road journey'), findsOneWidget);
+    expect(find.text('Recording'), findsOneWidget);
 
     await tap(tester, 'End journey');
     expect(find.text('End this journey?'), findsOneWidget);
     await tap(tester, 'Keep going');
-    expect(find.text('Recording · Road journey'), findsOneWidget);
+    expect(find.text('Recording'), findsOneWidget);
 
     await tap(tester, 'End journey');
     await act(
@@ -483,7 +535,7 @@ void main() {
 
     await show(tester);
 
-    expect(find.text('Stopped · Expedition'), findsOneWidget);
+    expect(find.text('Stopped'), findsOneWidget);
     expect(find.textContaining('Recording stopped at'), findsOneWidget);
     expect(find.text('Resume'), findsOneWidget);
     await cleanUp(tester);
@@ -510,7 +562,7 @@ void main() {
       await tap(tester, 'Expedition');
 
       expect(system.notificationRequests, 1);
-      expect(find.text('Recording · Expedition'), findsOneWidget);
+      expect(find.text('Recording'), findsOneWidget);
       expect(
         find.textContaining('Android isn’t showing its notification'),
         findsOneWidget,

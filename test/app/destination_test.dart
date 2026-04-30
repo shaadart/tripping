@@ -93,6 +93,16 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     });
     await tester.pump();
+    final closed = find.descendant(
+      of: find.byTooltip('Journey details'),
+      matching: find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.expanded == false,
+      ),
+    );
+    if (closed.evaluate().isNotEmpty) {
+      await tester.tap(find.byTooltip('Journey details'));
+      await tester.pump();
+    }
   }
 
   Future<void> show(WidgetTester tester) async {
@@ -145,6 +155,24 @@ void main() {
     await tester.tap(find.text('Camp'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('compact map opens destination search without opening details', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.runAsync(() async {
+      await recorder.start(JourneyMode.road);
+      await recorder.settled();
+    });
+    await tester.pump();
+    final journey = (recorder.state as Recording).journey.uuid;
+    expect(find.text('Show coordinates'), findsNothing);
+    await tester.tap(find.text('Where to?'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchScreen), findsOneWidget);
+    expect((recorder.state as Recording).journey.uuid, journey);
+    await cleanUp(tester);
+  });
 
   testWidgets('before a journey, search favours the last known position', (
     tester,

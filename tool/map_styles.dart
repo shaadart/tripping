@@ -2,8 +2,8 @@
 // and Dark (tool/map_styles/, unchanged upstream copies), so the changes are
 // reproducible rather than hand edits:
 //
-// - light: greys warmed towards the app's paper, a softer blue water
-// - dark: greys warmed towards the app's night, water kept visibly blue
+// - light: pale paper, restrained buildings, soft green parks and blue water
+// - dark: readable roads and relief on a quiet charcoal-green ground
 // - sun: from Positron, darker roads and near-black labels for glare
 //
 // Each also gets hill shading (O3, D-030) from the open terrain tiles on AWS
@@ -11,8 +11,8 @@
 //
 //   dart run tool/map_styles.dart
 //
-// Apart from the hill shading, only colours change; layers, sources and
-// attribution stay as upstream.
+// Sources and attribution stay upstream. Large place labels step aside at
+// street zoom so the journey and local street names remain legible.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -105,19 +105,45 @@ Map<String, Object?> _withTerrain(
 
 typedef _Rule = _Colour Function(String layer, String property, _Colour c);
 
-// Every grey, the background included, keeps its lightness, so upstream's
-// contrast between land, roads and buildings survives the warming.
-_Colour _light(String layer, String property, _Colour c) => switch (layer) {
-  'water' => _Colour.hex(0xBED3DA),
-  'waterway' => _Colour.hex(0xA9C6D2),
-  _ => c.isGrey ? c.warmed(hue: 38, saturation: 0.28) : c,
-};
+// Broad areas stay quiet; natural features retain familiar colour cues.
+_Colour _light(String layer, String property, _Colour c) {
+  final fill = switch (layer) {
+    'background' => 0xF8F8F3,
+    'water' => 0xD1E6EC,
+    'waterway' => 0xB6D5DF,
+    'park' => 0xE8EFDE,
+    'landcover_wood' => 0xDFE9D4,
+    'landuse_residential' => 0xF1F0E9,
+    'building' => 0xE8E7DF,
+    _ => null,
+  };
+  if (fill != null) return _Colour.hex(fill, c.a);
+  if (property == 'text-color' && c.isGrey) return _Colour.hex(0x666B62, c.a);
+  if (property == 'text-halo-color') return _Colour.hex(0xF8F8F3, .95);
+  return c.isGrey ? c.warmed(hue: 45, saturation: .12) : c;
+}
 
-_Colour _night(String layer, String property, _Colour c) => switch (layer) {
-  'water' => _Colour.hex(0x15212A),
-  'waterway' => _Colour.hex(0x1C2B35),
-  _ => c.isGrey ? c.warmed(hue: 35, saturation: 0.12) : c,
-};
+_Colour _night(String layer, String property, _Colour c) {
+  final fill = switch (layer) {
+    'background' => 0x141E20,
+    'water' => 0x183743,
+    'waterway' => 0x235062,
+    'park' => 0x1D3026,
+    'landcover_wood' => 0x24392D,
+    'landuse_residential' => 0x1B2729,
+    'building' => 0x283638,
+    _ => null,
+  };
+  if (fill != null) return _Colour.hex(fill, c.a);
+  if (property == 'text-color' && c.isGrey) return _Colour.hex(0xB7C8C2, c.a);
+  if (property == 'text-halo-color') return _Colour.hex(0x141E20, .95);
+  if (property.startsWith('line') && layer.startsWith('highway') && c.isGrey) {
+    return c
+        .withLightness((c.l * 1.5 + .055).clamp(0, .65))
+        .warmed(hue: 160, saturation: .1);
+  }
+  return c.isGrey ? c.warmed(hue: 160, saturation: .1) : c;
+}
 
 _Colour _sun(String layer, String property, _Colour c) {
   switch (layer) {
@@ -142,6 +168,13 @@ _Colour _sun(String layer, String property, _Colour c) {
 Map<String, Object?> _transform(Map<String, Object?> style, _Rule rule) {
   final copy = jsonDecode(jsonEncode(style)) as Map<String, Object?>;
   for (final layer in (copy['layers']! as List).cast<Map<String, Object?>>()) {
+    final id = layer['id']! as String;
+    if (layer['type'] == 'symbol' &&
+        (id.contains('city') ||
+            id.contains('town') ||
+            id.contains('village'))) {
+      layer['maxzoom'] = 14;
+    }
     final paint = layer['paint'] as Map<String, Object?>?;
     if (paint == null) continue;
     for (final property in paint.keys.toList()) {

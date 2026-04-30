@@ -22,13 +22,19 @@ adb shell am broadcast --receiver-foreground \
 ```
 
 Commands: `road`, `expedition`, `light`, `dark`, `sun`, `precise`, `approximate`,
+`stress` (crossings, out-and-back and interrupted ground),
 `history` (ends the selected synthetic journey), `straight`, `pause`,
 `largeText`, `offline`, `end`. `precise`/`approximate` deliver one synthetic fix;
 they are not a continuous native location feed. Ages continue to advance.
 
-Inspect shared route/track sections, a self-crossing, out-and-back ground, two
-separate recorded segments, all point symbols, actual sprite density and map
-key. History uses a real ended fixture and distinguishes finish from intended
+The default curving park journey is for ordinary-use review. Use `stress` to
+inspect shared route/track sections, a self-crossing, out-and-back ground and
+two separate recorded segments. Check all point symbols and actual sprite
+density. Use **See whole journey** to fit the saved ground, planned way and
+destination clear of the controls; **Follow my position** restores following.
+Tap the panel handle or swipe it up/down for details. **Map options → Map
+symbols** opens the visual guide. Critical GPS/save/pause notices stay visible
+when details are closed. History uses a real ended fixture and distinguishes finish from intended
 destination. After history use the other mode for remaining live checks.
 `offline` deliberately replaces only this test app's local style files with an
 empty basemap, disables its map networking and recreates the recording view.

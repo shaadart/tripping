@@ -36,9 +36,9 @@ class MapVisuals {
   Color get ground => scheme.surface;
   Color get marked => scheme.tertiary;
   Color get arrow => look.look == Look.dark ? Palette.night : Colors.white;
-  double get routeWidth => look.look == Look.highSun ? 16 : 14;
+  double get routeWidth => look.look == Look.highSun ? 12 : 10;
   double get trackWidth => look.trackWidth;
-  double get trackCasingWidth => trackWidth + 3;
+  double get trackCasingWidth => trackWidth + 1.5;
 }
 
 class MapSymbolGlyph extends StatelessWidget {
@@ -174,9 +174,9 @@ class _SymbolPainter extends CustomPainter {
       case MapSymbol.routeArrow:
         canvas.drawPath(
           Path()
-            ..moveTo(5, 5.5)
+            ..moveTo(5, 6)
             ..lineTo(10, 8)
-            ..lineTo(5, 10.5),
+            ..lineTo(5, 10),
           Paint()
             ..color = visuals.arrow
             ..style = PaintingStyle.stroke

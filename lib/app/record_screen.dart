@@ -9,6 +9,7 @@ import '../journey/journey.dart';
 import '../journey/journey_store.dart';
 import '../map/offline_area.dart';
 import '../map/offline_maps.dart';
+import '../map/map_key.dart';
 import '../places/place.dart';
 import '../places/place_search.dart';
 import '../places/polyline.dart';
@@ -132,6 +133,7 @@ class _RecordScreenState extends State<RecordScreen>
   late final StreamSubscription<RecorderState> _changes;
   Timer? _ticker;
   bool _busy = false;
+  bool _detailsOpen = false;
   bool _visible = true;
   bool _sharingHeld = false;
   bool? _mapNetwork;
@@ -846,10 +848,26 @@ class _RecordScreenState extends State<RecordScreen>
     );
   }
 
+  String _routeCaption(RouteRow route) {
+    if (_progress?.arrived == true) return 'Arrived';
+    if (_progress?.offRoute == true) return 'Off route';
+    if (route.kind == null) {
+      if (_planning) return 'Finding a way…';
+      return _routeWhy == null ? 'Destination selected' : 'Route unavailable';
+    }
+    if (route.kind == RouteKind.straight) return 'Direction only';
+    final progress = _progress;
+    if (progress != null) return '${kilometres(progress.metersLeft)} to go';
+    return _planning ? 'Finding a way…' : 'Planned way';
+  }
+
+  void _toggleDetails() => setState(() => _detailsOpen = !_detailsOpen);
+
   @override
   Widget build(BuildContext context) {
     final now = widget.clock();
     final state = _state;
+    final active = state is! Idle;
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Column(
@@ -862,66 +880,132 @@ class _RecordScreenState extends State<RecordScreen>
                   Positioned(
                     left: 16,
                     bottom: 16,
-                    child: FloatingActionButton.extended(
-                      heroTag: null,
-                      onPressed: state.latestFix == null
-                          ? null
-                          : () => _mark(state),
-                      icon: const Icon(Icons.flag_outlined),
-                      label: const Text('Mark'),
-                    ),
-                  ),
-                if (widget.settings case final settings?)
-                  Positioned(
-                    top: 64,
-                    right: 16,
-                    child: SafeArea(
-                      bottom: false,
-                      child: _RoundButton(
-                        onPressed: () =>
-                            _open((_) => IdentityScreen(settings: settings)),
-                        icon: Icons.person_outline,
-                        tooltip: 'Your map identity',
+                    child: Material(
+                      color: scheme.surface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: scheme.outlineVariant),
+                      ),
+                      child: TextButton.icon(
+                        onPressed: state.latestFix == null
+                            ? null
+                            : () => _mark(state),
+                        icon: const Icon(
+                          Icons.add_location_alt_outlined,
+                          size: 22,
+                        ),
+                        label: const Text('Mark'),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(96, 48),
+                          foregroundColor: scheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
                 Positioned(
                   top: 0,
                   left: 0,
+                  right: 0,
                   child: SafeArea(
                     bottom: false,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Row(
                         children: [
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: scheme.surface.withValues(alpha: 0.92),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Material(
+                                color: scheme.surface,
+                                borderRadius: BorderRadius.circular(18),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 13,
+                                  ),
+                                  child: _Header(state: state),
+                                ),
                               ),
-                              child: _Header(state: state),
                             ),
                           ),
+                          if (widget.settings case final settings?) ...[
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: 'Your map identity',
+                              child: IconButton(
+                                onPressed: () => _open(
+                                  (_) => IdentityScreen(settings: settings),
+                                ),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: scheme.surface,
+                                  minimumSize: const Size(48, 48),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                icon: ExcludeSemantics(
+                                  child: IdentityMarker(
+                                    identity: settings.identity.value,
+                                    size: 32,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                           if (widget.onToggleHighSun case final toggle?) ...[
                             const SizedBox(width: 8),
                             _HighSunButton(onPressed: toggle),
                           ],
-                          // Reachable during a trip too: an area can be
-                          // saved while there is still a signal.
-                          if (widget.offlineMapsBuilder case final offline?
-                              when state is! Idle) ...[
-                            const SizedBox(width: 8),
-                            _RoundButton(
-                              onPressed: () => _open(offline),
-                              icon: Icons.download_for_offline_outlined,
-                              tooltip: 'Offline maps',
+                          const SizedBox(width: 8),
+                          Material(
+                            color: scheme.surface,
+                            borderRadius: BorderRadius.circular(16),
+                            child: PopupMenuButton<String>(
+                              tooltip: 'Map options',
+                              icon: const Icon(Icons.more_horiz_rounded),
+                              onSelected: (value) {
+                                switch (value) {
+                                  case 'key':
+                                    showMapKey(context);
+                                  case 'offline':
+                                    final builder = widget.offlineMapsBuilder;
+                                    if (builder != null) _open(builder);
+                                  case 'details':
+                                    _toggleDetails();
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(
+                                  value: 'key',
+                                  child: ListTile(
+                                    leading: Icon(Icons.map_outlined),
+                                    title: Text('Map symbols'),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                                if (widget.offlineMapsBuilder != null && active)
+                                  const PopupMenuItem(
+                                    value: 'offline',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.download_for_offline_outlined,
+                                      ),
+                                      title: Text('Offline maps'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                if (active)
+                                  const PopupMenuItem(
+                                    value: 'details',
+                                    child: ListTile(
+                                      leading: Icon(Icons.tune_rounded),
+                                      title: Text('Journey details'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ),
@@ -930,118 +1014,297 @@ class _RecordScreenState extends State<RecordScreen>
               ],
             ),
           ),
-          // The panel holds everything that is not the map. It scrolls rather
-          // than overflow when the text is large.
           Material(
             color: scheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              side: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: .55),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
             child: SafeArea(
               top: false,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.6,
+                  maxHeight: MediaQuery.sizeOf(context).height * .6,
                 ),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      switch (state) {
-                        Idle() => const _Welcome(),
-                        Recording() ||
-                        Paused() ||
-                        Interrupted() => _Readout(state: state, now: now),
-                      },
-                      if (widget.planner case final planner?
-                          when widget.places != null)
-                        switch (state) {
-                          Idle() => ValueListenableBuilder(
-                            valueListenable: planner.pending,
-                            builder: (context, pending, _) => _NextDestination(
-                              pending: pending,
-                              onSearch: _chooseDestination,
-                              onClear: () => planner.pending.value = null,
+                      if (active)
+                        GestureDetector(
+                          onVerticalDragEnd: (drag) {
+                            final speed = drag.primaryVelocity ?? 0;
+                            if (speed.abs() > 80) {
+                              setState(() => _detailsOpen = speed < 0);
+                            }
+                          },
+                          child: Tooltip(
+                            message: 'Journey details',
+                            child: Semantics(
+                              button: true,
+                              expanded: _detailsOpen,
+                              label: 'Journey details',
+                              child: InkWell(
+                                onTap: _toggleDetails,
+                                child: SizedBox(
+                                  height: 48,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Container(
+                                        width: 32,
+                                        height: 4,
+                                        decoration: BoxDecoration(
+                                          color: scheme.outlineVariant,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 20,
+                                        child: Icon(
+                                          _detailsOpen
+                                              ? Icons.expand_more_rounded
+                                              : Icons.expand_less_rounded,
+                                          color: scheme.onSurfaceVariant,
+                                          size: 22,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                          _ => _DestinationLine(
-                            mode: switch (state) {
-                              Recording(:final journey) ||
-                              Paused(:final journey) ||
-                              Interrupted(:final journey) => journey.mode,
-                              Idle() => JourneyMode.road,
-                            },
-                            route: _route,
-                            why: _routeWhy,
-                            planning: _planning,
-                            progress: _progress,
-                            now: now,
-                            here: _compassFix(state, now),
-                            heading: _heading,
-                            onSearch: _chooseDestination,
-                            onClear: () {
-                              final journey = _routeJourney;
-                              if (journey != null) {
-                                unawaited(planner.clear(journey));
-                              }
-                            },
-                            onRetry: () => _replan(asked: true),
-                          ),
-                        },
-                      if (_groups && state is! Idle)
-                        _GroupLine(
-                          membership: _membership,
-                          paused: state is! Recording,
-                          sharingPaused: switch (state) {
-                            Recording(:final journey) =>
-                              widget.settings?.sharingPaused(journey.uuid) ??
-                                  false,
-                            _ => false,
-                          },
-                          onToggleSharing: state is Recording
-                              ? _toggleSharing
-                              : null,
-                          status: widget.group?.status,
-                          now: now,
-                          here: switch (state) {
-                            Recording(:final latestFix?) => latestFix,
-                            Recording(:final progress) ||
-                            Paused(:final progress) ||
-                            Interrupted(:final progress) => progress.lastFix,
-                            Idle() => null,
-                          },
-                          onLeave: _leaveGroup,
-                          convoy: _convoyFor(state, _route),
-                          onInvite: _invite,
-                          onJoin: _join,
                         ),
-                      const SizedBox(height: 12),
-                      _StatusLine(
-                        state: state,
-                        now: now,
-                        exits: _exits,
-                        onOpenLocationSettings: () => widget.location
-                            .openSettingsFor(LocationAccess.serviceOff),
-                        onOpenAppSettings: widget.system.openAppSettings,
-                      ),
-                      if (widget.savedOffline case final saved?)
-                        _SavedHere(state: state, saved: saved),
-                      _Coordinates(state: state, now: now),
-                      _SystemNotes(
-                        state: state,
-                        restricted: _restricted,
-                        notificationsShown: _notificationsShown,
-                        onOpenAppSettings: widget.system.openAppSettings,
-                      ),
-                      const SizedBox(height: 12),
-                      if (_refused case final problem?)
-                        _AccessProblem(
-                          problem: problem,
-                          onRetry: _retry == null
-                              ? null
-                              : () => _askFor(_retry!),
-                          onOpenSettings: () =>
-                              widget.location.openSettingsFor(problem),
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          20,
+                          active ? 0 : 20,
+                          20,
+                          16,
                         ),
-                      ..._actions(state),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            switch (state) {
+                              Idle() => const _Welcome(),
+                              _ => _Readout(state: state, now: now),
+                            },
+                            if (active &&
+                                !_detailsOpen &&
+                                _route == null &&
+                                widget.planner != null &&
+                                widget.places != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: OutlinedButton.icon(
+                                  onPressed: _chooseDestination,
+                                  icon: const Icon(Icons.search_rounded),
+                                  label: const Text('Where to?'),
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size.fromHeight(48),
+                                    alignment: Alignment.centerLeft,
+                                  ),
+                                ),
+                              ),
+                            if (active && !_detailsOpen)
+                              if (_route case final route?)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: InkWell(
+                                    onTap: _toggleDetails,
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            route.kind == RouteKind.straight
+                                                ? Icons.near_me_outlined
+                                                : Icons.place_rounded,
+                                            color: scheme.secondary,
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  route.destination,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                ),
+                                                Text(
+                                                  _routeCaption(route),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color:
+                                                            _progress
+                                                                    ?.offRoute ==
+                                                                true
+                                                            ? warningColor(
+                                                                context,
+                                                              )
+                                                            : scheme
+                                                                  .onSurfaceVariant,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const Icon(
+                                            Icons.chevron_right_rounded,
+                                            size: 20,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            if (!active || _detailsOpen) ...[
+                              if (widget.planner case final planner?
+                                  when widget.places != null)
+                                switch (state) {
+                                  Idle() => ValueListenableBuilder(
+                                    valueListenable: planner.pending,
+                                    builder: (context, pending, _) =>
+                                        _NextDestination(
+                                          pending: pending,
+                                          onSearch: _chooseDestination,
+                                          onClear: () =>
+                                              planner.pending.value = null,
+                                        ),
+                                  ),
+                                  _ => _DestinationLine(
+                                    mode: switch (state) {
+                                      Recording(:final journey) ||
+                                      Paused(:final journey) ||
+                                      Interrupted(
+                                        :final journey,
+                                      ) => journey.mode,
+                                      Idle() => JourneyMode.road,
+                                    },
+                                    route: _route,
+                                    why: _routeWhy,
+                                    planning: _planning,
+                                    progress: _progress,
+                                    now: now,
+                                    here: _compassFix(state, now),
+                                    heading: _heading,
+                                    onSearch: _chooseDestination,
+                                    onClear: () {
+                                      final journey = _routeJourney;
+                                      if (journey != null) {
+                                        unawaited(planner.clear(journey));
+                                      }
+                                    },
+                                    onRetry: () => _replan(asked: true),
+                                  ),
+                                },
+                              if (_groups && state is! Idle)
+                                _GroupLine(
+                                  membership: _membership,
+                                  paused: state is! Recording,
+                                  sharingPaused: switch (state) {
+                                    Recording(:final journey) =>
+                                      widget.settings?.sharingPaused(
+                                            journey.uuid,
+                                          ) ??
+                                          false,
+                                    _ => false,
+                                  },
+                                  onToggleSharing: state is Recording
+                                      ? _toggleSharing
+                                      : null,
+                                  status: widget.group?.status,
+                                  now: now,
+                                  here: switch (state) {
+                                    Recording(:final latestFix?) => latestFix,
+                                    Recording(:final progress) ||
+                                    Paused(:final progress) ||
+                                    Interrupted(
+                                      :final progress,
+                                    ) => progress.lastFix,
+                                    Idle() => null,
+                                  },
+                                  onLeave: _leaveGroup,
+                                  convoy: _convoyFor(state, _route),
+                                  onInvite: _invite,
+                                  onJoin: _join,
+                                ),
+
+                              if (widget.savedOffline case final saved?)
+                                _SavedHere(state: state, saved: saved),
+                              _Coordinates(state: state, now: now),
+                            ],
+                            if (active && !_detailsOpen && _groups)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  onPressed: _toggleDetails,
+                                  icon: const Icon(
+                                    Icons.people_outline_rounded,
+                                    size: 20,
+                                  ),
+                                  label: Text(
+                                    state is Recording
+                                        ? 'Companions'
+                                        : 'Companions · sharing paused',
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 10),
+                            _StatusLine(
+                              state: state,
+                              now: now,
+                              exits: _exits,
+                              compact: active && !_detailsOpen,
+                              onOpenLocationSettings: () => widget.location
+                                  .openSettingsFor(LocationAccess.serviceOff),
+                              onOpenAppSettings: widget.system.openAppSettings,
+                            ),
+                            _SystemNotes(
+                              state: state,
+                              restricted: _restricted,
+                              notificationsShown: _notificationsShown,
+                              onOpenAppSettings: widget.system.openAppSettings,
+                            ),
+                            if (_refused case final problem?)
+                              _AccessProblem(
+                                problem: problem,
+                                onRetry: _retry == null
+                                    ? null
+                                    : () => _askFor(_retry!),
+                                onOpenSettings: () =>
+                                    widget.location.openSettingsFor(problem),
+                              ),
+                            const SizedBox(height: 12),
+                            ..._actions(state),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1136,35 +1399,56 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (label, color) = switch (state) {
-      Idle() => ('Tripping', scheme.onSurface),
+    final (label, icon, color, description) = switch (state) {
+      Idle() => (
+        'Tripping',
+        Icons.explore_outlined,
+        scheme.onSurface,
+        'Tripping',
+      ),
       Recording(:final journey) => (
-        'Recording · ${modeName(journey.mode)}',
+        'Recording',
+        journey.mode == JourneyMode.road
+            ? Icons.directions_car_rounded
+            : Icons.terrain_rounded,
         scheme.primary,
+        'Recording · ${modeName(journey.mode)}',
       ),
       Paused(:final journey) => (
-        'Paused · ${modeName(journey.mode)}',
+        'Paused',
+        Icons.pause_rounded,
         scheme.onSurfaceVariant,
+        'Paused · ${modeName(journey.mode)}',
       ),
       Interrupted(:final journey) => (
-        'Stopped · ${modeName(journey.mode)}',
+        'Stopped',
+        Icons.warning_amber_rounded,
         warningColor(context),
+        'Stopped · ${modeName(journey.mode)}',
       ),
     };
-    return Row(
-      children: [
-        if (state is Recording) ...[
-          Icon(Icons.circle, size: 12, color: color),
+    return Semantics(
+      label: description,
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 20, color: color),
           const SizedBox(width: 8),
-        ],
-        Text(
-          label,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1195,26 +1479,6 @@ class _ActionPair extends StatelessWidget {
   }
 }
 
-/// A small round button over the map, like the header.
-class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.onPressed,
-    required this.icon,
-    required this.tooltip,
-  });
-
-  final VoidCallback onPressed;
-  final IconData icon;
-  final String tooltip;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
-    shape: const CircleBorder(),
-    child: IconButton(onPressed: onPressed, icon: Icon(icon), tooltip: tooltip),
-  );
-}
-
 /// Switches the high-contrast look for direct sunlight; filled while on.
 class _HighSunButton extends StatelessWidget {
   const _HighSunButton({required this.onPressed});
@@ -1227,8 +1491,9 @@ class _HighSunButton extends StatelessWidget {
     final on = lookOf(context).look == Look.highSun;
     return Material(
       color: scheme.surface.withValues(alpha: 0.92),
-      shape: const CircleBorder(),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: IconButton(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         onPressed: onPressed,
         isSelected: on,
         icon: const Icon(Icons.wb_sunny_outlined),
@@ -1286,22 +1551,40 @@ class _Readout extends StatelessWidget {
       value: kilometres(progress.meters),
       label: 'Distance',
     );
-    final row = Row(
-      children: [
-        for (final figure in switch (journey.mode) {
-          JourneyMode.road => [
-            Figure(value: speedText(_freshSpeed()), label: 'Speed'),
-            distance,
-            time,
+    final row = LayoutBuilder(
+      builder: (context, box) {
+        final columns = MediaQuery.textScalerOf(context).scale(24) > 34 ? 1 : 3;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final figure in switch (journey.mode) {
+              JourneyMode.road => [
+                Figure(value: speedText(_freshSpeed()), label: 'Speed'),
+                distance,
+                time,
+              ],
+              JourneyMode.expedition => [
+                time,
+                distance,
+                Figure(value: clockTime(progress.movingTime), label: 'Moving'),
+              ],
+            })
+              SizedBox(
+                width: (box.maxWidth - 12 * (columns - 1)) / columns,
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    textTheme: Theme.of(context).textTheme.copyWith(
+                      headlineMedium: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700, fontSize: 24),
+                    ),
+                  ),
+                  child: figure,
+                ),
+              ),
           ],
-          JourneyMode.expedition => [
-            time,
-            distance,
-            Figure(value: clockTime(progress.movingTime), label: 'Moving'),
-          ],
-        })
-          Expanded(child: figure),
-      ],
+        );
+      },
     );
     final (climb, descent) = (progress.climb, progress.descent);
     if (journey.mode != JourneyMode.expedition ||
@@ -1936,8 +2219,10 @@ class _StatusLine extends StatelessWidget {
     required this.exits,
     required this.onOpenLocationSettings,
     required this.onOpenAppSettings,
+    this.compact = false,
   });
 
+  final bool compact;
   final RecorderState state;
   final DateTime now;
 
@@ -1958,7 +2243,13 @@ class _StatusLine extends StatelessWidget {
       ),
       Interrupted(:final stoppedAt) => _interruption(context, stoppedAt),
     };
-    if (message == null) return const SizedBox.shrink();
+    if (message == null ||
+        (compact &&
+            !needsAttention &&
+            state is Recording &&
+            message.startsWith('GPS ±'))) {
+      return const SizedBox.shrink();
+    }
     final color = needsAttention
         ? warningColor(context)
         : Theme.of(context).colorScheme.onSurfaceVariant;

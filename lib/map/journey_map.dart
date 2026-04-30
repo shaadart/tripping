@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' show Point;
+import 'dart:math' show Point, min, max;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +21,7 @@ import '../places/polyline.dart';
 import '../routing/route_planner.dart';
 import 'map_style.dart';
 import 'map_symbols.dart';
-import 'map_key.dart';
+
 import 'terrain.dart';
 import 'track_geometry.dart';
 
@@ -94,6 +94,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   static const _positionSource = 'position';
   static const _endSource = 'journey-ends';
   Fix? _originDrawn;
+  List<(double, double)> _plannedPoints = const [];
+  (double, double)? _destinationPoint;
   static const _waypointSource = 'waypoints';
   static const _routeSource = 'route';
   static const _destinationSource = 'destination';
@@ -495,6 +497,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   void _watchRoute(MapLibreMapController map, int? journeyId) {
     _routeWatch?.cancel();
     _routeWatch = null;
+    _plannedPoints = const [];
+    _destinationPoint = null;
     widget.planner?.pending.removeListener(_drawPending);
     final planner = widget.planner;
     if (planner == null) return;
@@ -505,6 +509,12 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
     }
     _routeWatch = planner.watch(journeyId).listen((route) {
       _serially(() async {
+        _plannedPoints = route?.geometry == null
+            ? const []
+            : decodePolyline(route!.geometry!);
+        _destinationPoint = route == null
+            ? null
+            : (route.latitude, route.longitude);
         await map.setGeoJsonSource(
           _routeSource,
           route?.kind == null || route?.geometry == null
@@ -530,6 +540,10 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
     final pending = widget.planner?.pending.value;
     if (map == null) return;
     _serially(() async {
+      _plannedPoints = const [];
+      _destinationPoint = pending == null
+          ? null
+          : (pending.latitude, pending.longitude);
       await map.setGeoJsonSource(_routeSource, trackFeatures(const []));
       await map.setGeoJsonSource(
         _destinationSource,
@@ -710,6 +724,35 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
     }
   }
 
+  /// Fit the saved journey and its intention without changing either.
+  void _overview() {
+    final map = _map;
+    if (map == null || !_styleReady) return;
+    // Include the pin's body and labels, not just their coordinates. The
+    // toolbar and Mark button must not cover either end of the journey.
+    final top =
+        MediaQuery.paddingOf(context).top +
+        120 +
+        (_blank ? MediaQuery.textScalerOf(context).scale(48) : 0);
+    const bottom = 104.0;
+    final height = context.size?.height ?? 400;
+    final scale = min(1.0, max(0.0, height - 96) / (top + bottom));
+    setState(() => _follow = false);
+    _serially(
+      () => fitCamera(
+        map,
+        _track.segments,
+        also: [
+          ..._plannedPoints,
+          ?_destinationPoint,
+          for (final point in _waypoints) (point.latitude, point.longitude),
+          if (_shownFix case final fix?) (fix.latitude, fix.longitude),
+        ],
+        padding: EdgeInsets.fromLTRB(64, top * scale, 88, bottom * scale),
+      ),
+    );
+  }
+
   /// Back to the journey's follow view.
   void _recenter() {
     setState(() => _follow = true);
@@ -721,7 +764,6 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final recording = widget.state is Recording;
     return Stack(
       children: [
         // A drag on the map means the user wants to look around: stop
@@ -753,10 +795,10 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
             onMapLongClick: (_, at) => _longPress(at),
             // Below the status bar, level with the header (the road view
             // turns, so the compass shows where north is).
-            compassViewPosition: CompassViewPosition.topRight,
+            compassViewPosition: CompassViewPosition.topLeft,
             compassViewMargins: Point(
               16,
-              MediaQuery.paddingOf(context).top + 12,
+              MediaQuery.paddingOf(context).top + 72,
             ),
             tiltGesturesEnabled: false,
             attributionButtonPosition: AttributionButtonPosition.bottomRight,
@@ -777,20 +819,59 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
             ),
           ),
         Positioned(
-          top: MediaQuery.paddingOf(context).top + 124,
           right: 16,
-          child: const MapKeyButton(),
-        ),
-        if (recording && !_follow && _shownFix != null)
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: FloatingActionButton.small(
-              onPressed: _recenter,
-              tooltip: 'Follow my position',
-              child: const Icon(Icons.my_location),
+          bottom: 16,
+          child: Material(
+            color: Theme.of(context).colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: _overview,
+                  tooltip: 'See whole journey',
+                  icon: const Icon(Icons.fit_screen_rounded),
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                ),
+                SizedBox(
+                  width: 28,
+                  child: Divider(
+                    height: 1,
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                Semantics(
+                  selected: _follow,
+                  child: IconButton(
+                    onPressed: _recenter,
+                    tooltip: 'Follow my position',
+                    icon: Icon(
+                      _follow
+                          ? Icons.my_location_rounded
+                          : Icons.location_searching_rounded,
+                    ),
+                    color: _follow
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface,
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
       ],
     );
   }

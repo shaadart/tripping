@@ -61,7 +61,7 @@ void main() {
         };
         expect(
           lines['way-road']!.lineWidth as double,
-          greaterThan((lines['history-casing']!.lineWidth as double) + 4),
+          greaterThan((lines['history-casing']!.lineWidth as double) + 3),
         );
         expect(lines['history-line']!.lineDasharray, isNull);
         expect(lines['way-straight']!.lineDasharray, isNotEmpty);

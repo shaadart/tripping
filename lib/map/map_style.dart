@@ -88,20 +88,17 @@ Future<void> fitCamera(
 }) async {
   final box = boundsOf(track, also: also);
   if (box == null) return;
-  if (box.north - box.south < 0.002 && box.east - box.west < 0.002) {
-    await map.moveCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng((box.south + box.north) / 2, (box.west + box.east) / 2),
-        16,
-      ),
-    );
-    return;
-  }
+  final centerLat = (box.south + box.north) / 2;
+  final centerLon = (box.west + box.east) / 2;
+  final south = box.north - box.south < .002 ? centerLat - .001 : box.south;
+  final north = box.north - box.south < .002 ? centerLat + .001 : box.north;
+  final west = box.east - box.west < .002 ? centerLon - .001 : box.west;
+  final east = box.east - box.west < .002 ? centerLon + .001 : box.east;
   await map.moveCamera(
     CameraUpdate.newLatLngBounds(
       LatLngBounds(
-        southwest: LatLng(box.south, box.west),
-        northeast: LatLng(box.north, box.east),
+        southwest: LatLng(south, west),
+        northeast: LatLng(north, east),
       ),
       left: padding.left,
       top: padding.top,
@@ -130,7 +127,7 @@ Future<void> addRouteLayers(
     '$source-casing',
     LineLayerProperties(
       lineColor: v.ground.toHexStringRGB(),
-      lineWidth: v.routeWidth + 3,
+      lineWidth: v.routeWidth + 2,
       lineCap: 'round',
       lineJoin: 'round',
     ),
@@ -152,7 +149,7 @@ Future<void> addRouteLayers(
     '$source-direction',
     SymbolLayerProperties(
       symbolPlacement: 'line',
-      symbolSpacing: 130,
+      symbolSpacing: 160,
       iconImage: MapSymbol.routeArrow.image,
       iconSize: iconScale,
       iconRotationAlignment: 'map',

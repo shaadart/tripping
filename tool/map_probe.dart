@@ -23,7 +23,7 @@ import 'package:tripping/routing/router.dart';
 
 import '../test/support/fakes.dart';
 
-const _way = [
+const _stressWay = [
   (12.9748, 77.5915),
   (12.9758, 77.5915),
   (12.9758, 77.5932),
@@ -31,7 +31,7 @@ const _way = [
   (12.9772, 77.5915),
   (12.9780, 77.5915),
 ];
-const _ground = [
+const _stressGround = [
   [
     (12.9748, 77.5915),
     (12.9758, 77.5915),
@@ -48,18 +48,49 @@ const _ground = [
   ],
 ];
 
+const _way = [
+  (12.9748, 77.5915),
+  (12.9750, 77.59155),
+  (12.97525, 77.59167),
+  (12.97545, 77.59186),
+  (12.97565, 77.59205),
+  (12.97586, 77.59218),
+  (12.9761, 77.59228),
+  (12.97635, 77.5923),
+  (12.97658, 77.59234),
+  (12.97678, 77.59245),
+  (12.97695, 77.59264),
+  (12.9771, 77.59285),
+  (12.9773, 77.59302),
+  (12.97752, 77.59313),
+  (12.97775, 77.5932),
+  (12.978, 77.59324),
+];
+final _ground = [
+  _way.take(7).toList(),
+  [_way[8], _way[9], _way[10], _way[11]],
+];
+
 class _Fixture {
-  _Fixture(this.store, this.recorder, this.location, this.journey, this.route);
+  _Fixture(
+    this.store,
+    this.recorder,
+    this.location,
+    this.journey,
+    this.route,
+    this.here,
+  );
   final JourneyStore store;
   final Recorder recorder;
   final FakeLocation location;
   final JourneyRow journey;
   final RouteRow route;
+  final (double, double) here;
   bool approximate = false;
   late final planner = RoutePlanner(store, _NoRouter());
   Future<void> fix() async {
     if (!location.listening) return;
-    final at = _ground.last.last;
+    final at = here;
     location.emit(
       Fix(
         time: DateTime.now().toUtc(),
@@ -84,7 +115,13 @@ class _NoRouter implements RouteSource {
   }) async => throw const RouteError('Synthetic rendering fixture');
 }
 
-Future<_Fixture> _seed(Directory dir, JourneyMode mode) async {
+Future<_Fixture> _seed(
+  Directory dir,
+  JourneyMode mode, {
+  List<(double, double)> way = _way,
+  List<List<(double, double)>>? ground,
+}) async {
+  ground ??= _ground;
   final now = DateTime.now().toUtc();
   final store = JourneyStore.file(
     File(
@@ -96,7 +133,7 @@ Future<_Fixture> _seed(Directory dir, JourneyMode mode) async {
     at: now.subtract(const Duration(minutes: 20)),
   );
   var second = 0;
-  for (final (index, segment) in _ground.indexed) {
+  for (final (index, segment) in ground.indexed) {
     if (index > 0) {
       await store.resume(
         journey.id,
@@ -124,8 +161,8 @@ Future<_Fixture> _seed(Directory dir, JourneyMode mode) async {
   await store.setDestination(
     journey.id,
     name: 'Cedar Camp',
-    latitude: _way.last.$1,
-    longitude: _way.last.$2,
+    latitude: way.last.$1,
+    longitude: way.last.$2,
   );
   await store.saveRoute(
     journey.id,
@@ -134,11 +171,11 @@ Future<_Fixture> _seed(Directory dir, JourneyMode mode) async {
     computedAt: now,
     meters: 700,
     seconds: 500,
-    geometry: encodePolyline(_way),
+    geometry: encodePolyline(way),
   );
   for (final (kind, name, at) in [
-    (WaypointKind.marked, 'Rest stop', (12.9765, 77.5924)),
-    (WaypointKind.planned, 'Lookout', (12.9772, 77.5932)),
+    (WaypointKind.marked, 'Rest stop', ground.first.last),
+    (WaypointKind.planned, 'Lookout', way[way.length - 3]),
   ]) {
     await store.addWaypoint(
       journey.id,
@@ -158,6 +195,7 @@ Future<_Fixture> _seed(Directory dir, JourneyMode mode) async {
     location,
     journey,
     (await store.routeOf(journey.id))!,
+    ground.last.last,
   );
   await fixture.fix();
   return fixture;
@@ -182,6 +220,13 @@ Future<void> main() async {
   };
   final look = ValueNotifier(Look.light);
   final mode = ValueNotifier(JourneyMode.road);
+  final stressMode = ValueNotifier(false);
+  final stress = await _seed(
+    dir,
+    JourneyMode.expedition,
+    way: _stressWay,
+    ground: _stressGround,
+  );
   final history = ValueNotifier(false);
   final scale = ValueNotifier(1.0);
   final revision = ValueNotifier(0);
@@ -189,7 +234,7 @@ Future<void> main() async {
   const MethodChannel('tripping/pause_probe').setMethodCallHandler((
     call,
   ) async {
-    final fixture = fixtures[mode.value]!;
+    final fixture = stressMode.value ? stress : fixtures[mode.value]!;
     switch (call.method) {
       case 'light':
         look.value = Look.light;
@@ -197,11 +242,18 @@ Future<void> main() async {
         look.value = Look.dark;
       case 'sun':
         look.value = Look.highSun;
+      case 'stress':
+        stressMode.value = true;
+        mode.value = JourneyMode.expedition;
+        history.value = false;
+        await stress.fix();
       case 'road':
+        stressMode.value = false;
         mode.value = JourneyMode.road;
         history.value = false;
         await fixtures[mode.value]!.fix();
       case 'expedition':
+        stressMode.value = false;
         mode.value = JourneyMode.expedition;
         history.value = false;
         await fixtures[mode.value]!.fix();
@@ -224,7 +276,10 @@ Future<void> main() async {
           provider: 'synthetic direction',
           computedAt: DateTime.now().toUtc(),
           meters: 300,
-          geometry: encodePolyline([_ground.last.last, _way.last]),
+          geometry: encodePolyline([
+            fixture.here,
+            (fixture.route.latitude, fixture.route.longitude),
+          ]),
         );
       case 'offline':
         noTiles = true;
@@ -270,7 +325,7 @@ Future<void> main() async {
       case 'largeText':
         scale.value = 2;
       case 'end':
-        for (final f in fixtures.values) {
+        for (final f in [...fixtures.values, stress]) {
           await f.recorder.end();
         }
         await MapActivity.setNetworkEnabled(false);
@@ -280,9 +335,16 @@ Future<void> main() async {
   });
   runApp(
     ListenableBuilder(
-      listenable: Listenable.merge([look, mode, history, scale, revision]),
+      listenable: Listenable.merge([
+        look,
+        mode,
+        history,
+        scale,
+        revision,
+        stressMode,
+      ]),
       builder: (context, _) {
-        final f = fixtures[mode.value]!;
+        final f = stressMode.value ? stress : fixtures[mode.value]!;
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: trippingLook(look.value),
@@ -308,7 +370,7 @@ Future<void> main() async {
                   ),
                 )
               : RecordScreen(
-                  key: ValueKey((mode.value, revision.value)),
+                  key: ValueKey((mode.value, revision.value, stressMode.value)),
                   recorder: f.recorder,
                   location: f.location,
                   system: FakeSystemAccess(),

@@ -59,6 +59,16 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     });
     await tester.pump();
+    final closed = find.descendant(
+      of: find.byTooltip('Journey details'),
+      matching: find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.expanded == false,
+      ),
+    );
+    if (closed.evaluate().isNotEmpty) {
+      await tester.tap(find.byTooltip('Journey details'));
+      await tester.pump();
+    }
   }
 
   Future<void> show(WidgetTester tester) async {
@@ -91,7 +101,7 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await act(tester, () async {});
   }
 
   Future<void> cleanUp(WidgetTester tester) async {
@@ -213,6 +223,8 @@ void main() {
       (row?.groupId, row?.secret, row?.role, row?.hostName),
       (hostGroup, asha.secret, GroupRole.member, 'Asha'),
     );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Journey details'));
     await tester.pump();
     expect(find.text("In Asha's group"), findsOneWidget);
     // Membership is never shown as connection.
