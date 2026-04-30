@@ -84,6 +84,14 @@ void main() {
       );
       await tester.ensureVisible(find.byTooltip('Gate'));
       await tester.pumpAndSettle();
+      for (final label in [
+        ...IdentityColour.values.map((c) => c.label),
+        ...MarkerShape.values.map((s) => s.label),
+      ]) {
+        final target = tester.getSize(find.byTooltip(label));
+        expect(target.width, greaterThanOrEqualTo(64));
+        expect(target.height, greaterThanOrEqualTo(64));
+      }
       expect(tester.takeException(), isNull);
       expect(
         tester.getSize(find.widgetWithText(FilledButton, 'Continue')).height,

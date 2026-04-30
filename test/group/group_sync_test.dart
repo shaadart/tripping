@@ -118,7 +118,7 @@ void main() {
 
   test('companions: others only, genuine only, with what they said', () async {
     final keys = await GroupKeys.derive(secret);
-    final sync = GroupSync(relay);
+    final sync = GroupSync(relay, clock: () => t0);
     await sync.follow(membership(secret));
     final asha = Shared(
       name: 'Asha',
@@ -322,7 +322,7 @@ void main() {
 
   test('a companion standing still for over 2 minutes is "stopped"', () async {
     final keys = await GroupKeys.derive(secret);
-    final sync = GroupSync(relay);
+    final sync = GroupSync(relay, clock: () => t0);
     await sync.follow(membership(secret));
     for (final minute in [0, 1, 2, 3]) {
       final at = t0.add(Duration(minutes: minute));

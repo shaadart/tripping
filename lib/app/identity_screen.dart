@@ -73,15 +73,27 @@ class _IdentityScreenState extends State<IdentityScreen> {
               constraints: const BoxConstraints(maxWidth: 360),
               child: SizedBox(
                 width: double.infinity,
-                height: 56,
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: Text(
-                    _saving
-                        ? 'Saving…'
-                        : widget.welcome
-                        ? 'Continue'
-                        : 'Save',
+                height: 68,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color.alphaBlend(
+                      Colors.black.withValues(alpha: .22),
+                      scheme.primary,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      child: Text(
+                        _saving
+                            ? 'Saving…'
+                            : widget.welcome
+                            ? 'Continue'
+                            : 'Save',
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -99,14 +111,14 @@ class _IdentityScreenState extends State<IdentityScreen> {
                   constraints: const BoxConstraints(maxWidth: 408),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 24,
+                      horizontal: 20,
+                      vertical: 20,
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SizedBox(
-                          height: 168,
+                          height: 164,
                           width: double.infinity,
                           child: Stack(
                             alignment: Alignment.center,
@@ -118,11 +130,11 @@ class _IdentityScreenState extends State<IdentityScreen> {
                                   ),
                                 ),
                               ),
-                              IdentityMarker(identity: _identity, size: 88),
+                              IdentityMarker(identity: _identity, size: 120),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
                         TextField(
                           controller: _name,
                           enabled: !_saving,
@@ -134,105 +146,91 @@ class _IdentityScreenState extends State<IdentityScreen> {
                           decoration: InputDecoration(
                             hintText: 'Your name',
                             counterText: '',
-                            enabledBorder: UnderlineInputBorder(
+                            filled: true,
+                            fillColor: scheme.surfaceContainerHighest,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 20,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
                               borderSide: BorderSide(
                                 color: scheme.outlineVariant,
+                                width: 2,
                               ),
                             ),
-                            focusedBorder: UnderlineInputBorder(
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
                               borderSide: BorderSide(
                                 color: scheme.primary,
-                                width: 1.5,
+                                width: 2,
                               ),
                             ),
                           ),
                           onChanged: (_) => setState(() {}),
                           onSubmitted: (_) => _saving ? null : _save(),
                         ),
-                        const SizedBox(height: 28),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            for (final colour in IdentityColour.values)
-                              _VisualChoice(
-                                label: colour.label,
-                                selected: _colour == colour,
-                                onPressed: _saving
-                                    ? null
-                                    : () => setState(() => _colour = colour),
-                                child: Container(
-                                  width: 34,
-                                  height: 34,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: _colour == colour
-                                        ? Border.all(
-                                            color: scheme.onSurface,
-                                            width: 1.2,
-                                          )
-                                        : null,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: Color(colour.argb),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: _colour == colour
-                                        ? const Icon(
-                                            Icons.check,
-                                            size: 15,
-                                            color: Colors.white,
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
                         const SizedBox(height: 20),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            for (final shape in MarkerShape.values)
-                              _VisualChoice(
-                                label: shape.label,
-                                selected: _shape == shape,
-                                width: 56,
-                                height: 64,
-                                onPressed: _saving
-                                    ? null
-                                    : () => setState(() => _shape = shape),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    IdentityMarker(
-                                      identity: MapIdentity(
-                                        name: _name.text,
-                                        colour: _colour,
-                                        shape: shape,
-                                      ),
-                                      size: 36,
-                                      showInitials: false,
-                                    ),
-                                    const SizedBox(height: 7),
-                                    Container(
-                                      width: 16,
-                                      height: 2,
-                                      color: _shape == shape
-                                          ? scheme.onSurface
-                                          : Colors.transparent,
-                                    ),
-                                  ],
+                        LayoutBuilder(
+                          builder: (context, box) => Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              for (final colour in IdentityColour.values)
+                                _VisualChoice(
+                                  label: colour.label,
+                                  selected: _colour == colour,
+                                  width: (box.maxWidth - 20) / 3,
+                                  height: 64,
+                                  fill: Color(colour.argb),
+                                  onPressed: _saving
+                                      ? null
+                                      : () => setState(() => _colour = colour),
+                                  child: _colour == colour
+                                      ? const Icon(
+                                          Icons.check_rounded,
+                                          size: 30,
+                                          color: Colors.white,
+                                        )
+                                      : const SizedBox.shrink(),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        LayoutBuilder(
+                          builder: (context, box) => Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              for (final shape in MarkerShape.values)
+                                _VisualChoice(
+                                  label: shape.label,
+                                  selected: _shape == shape,
+                                  width: (box.maxWidth - 24) / 4,
+                                  height: 80,
+                                  fill: _shape == shape
+                                      ? Color(
+                                          _colour.argb,
+                                        ).withValues(alpha: .13)
+                                      : scheme.surfaceContainerHighest,
+                                  outline: _shape == shape
+                                      ? Color(_colour.argb)
+                                      : scheme.outlineVariant,
+                                  onPressed: _saving
+                                      ? null
+                                      : () => setState(() => _shape = shape),
+                                  child: IdentityMarker(
+                                    identity: MapIdentity(
+                                      name: _name.text,
+                                      colour: _colour,
+                                      shape: shape,
+                                    ),
+                                    size: 52,
+                                    showInitials: false,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                         if (_error != null)
                           Padding(
@@ -261,8 +259,10 @@ class _VisualChoice extends StatelessWidget {
     required this.selected,
     required this.onPressed,
     required this.child,
-    this.width = 48,
-    this.height = 48,
+    required this.width,
+    required this.height,
+    required this.fill,
+    this.outline,
   });
   final String label;
   final bool selected;
@@ -270,6 +270,8 @@ class _VisualChoice extends StatelessWidget {
   final Widget child;
   final double width;
   final double height;
+  final Color fill;
+  final Color? outline;
   void _select() {
     FocusManager.instance.primaryFocus?.unfocus();
     onPressed?.call();
@@ -285,17 +287,22 @@ class _VisualChoice extends StatelessWidget {
     excludeSemantics: true,
     child: Tooltip(
       message: label,
-      child: InkResponse(
-        onTap: onPressed == null ? null : _select,
-        splashFactory: NoSplash.splashFactory,
-        highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        excludeFromSemantics: true,
-        radius: 28,
-        child: SizedBox(
-          width: width,
-          height: height,
-          child: Center(child: child),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Material(
+          color: fill,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: outline ?? Colors.transparent, width: 2),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed == null ? null : _select,
+            excludeFromSemantics: true,
+            splashFactory: NoSplash.splashFactory,
+            child: Center(child: child),
+          ),
         ),
       ),
     ),

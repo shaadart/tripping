@@ -65,46 +65,48 @@ class _MarkerPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(size.width / 44, size.height / 44);
-    final path = Path();
+    var path = Path();
     switch (identity.shape) {
       case MarkerShape.rosette:
-        for (var i = 0; i < 16; i++) {
-          final angle = -math.pi / 2 + i * math.pi / 8;
-          final radius = i.isEven ? 17.0 : 15.0;
-          final x = 22 + math.cos(angle) * radius;
-          final y = 22 + math.sin(angle) * radius;
-          if (i == 0) {
-            path.moveTo(x, y);
-          } else {
-            path.lineTo(x, y);
-          }
-        }
-        path.close();
+        path = _softPolygon([
+          for (var i = 0; i < 16; i++)
+            Offset(
+              22 +
+                  math.cos(-math.pi / 2 + i * math.pi / 8) *
+                      (i.isEven ? 18 : 15),
+              22 +
+                  math.sin(-math.pi / 2 + i * math.pi / 8) *
+                      (i.isEven ? 18 : 15),
+            ),
+        ]);
       case MarkerShape.reed:
-        path.moveTo(6, 29);
-        path.cubicTo(5, 13, 20, 5, 37, 6);
-        path.cubicTo(39, 23, 29, 39, 6, 36);
+        path.moveTo(7, 31);
+        path.cubicTo(7, 16, 19, 7, 33, 6);
+        path.quadraticBezierTo(37, 6, 37, 10);
+        path.cubicTo(36, 26, 25, 37, 10, 37);
+        path.quadraticBezierTo(6, 37, 7, 31);
         path.close();
       case MarkerShape.gate:
-        path.moveTo(7, 37);
-        path.lineTo(7, 16);
-        path.lineTo(13, 16);
-        path.lineTo(13, 8);
-        path.lineTo(31, 8);
-        path.lineTo(31, 16);
-        path.lineTo(37, 16);
-        path.lineTo(37, 37);
-        path.close();
+        path = _softPolygon(const [
+          Offset(6, 37),
+          Offset(6, 17),
+          Offset(12, 17),
+          Offset(12, 7),
+          Offset(32, 7),
+          Offset(32, 17),
+          Offset(38, 17),
+          Offset(38, 37),
+        ]);
       case MarkerShape.tablet:
         path.addRRect(
           RRect.fromRectAndRadius(
             const Rect.fromLTWH(8, 5, 28, 34),
-            const Radius.circular(5),
+            const Radius.circular(11),
           ),
         );
     }
-    // One fine edge separates the solid mark from terrain without a badge
-    // outline, glow or decorative shadow.
+    // Solid pigment, no white casing. Neutral outline belongs only to the
+    // existing last-known treatment, never to a live identity.
     canvas.drawPath(
       path,
       Paint()
@@ -112,14 +114,15 @@ class _MarkerPainter extends CustomPainter {
             ? const Color(0xFFF6F1E7)
             : Color(identity.colour.argb),
     );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = hollow ? const Color(0xFF625D55) : const Color(0xF2FFFFFF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.1
-        ..strokeJoin = StrokeJoin.round,
-    );
+    if (hollow) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = const Color(0xFF625D55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1,
+      );
+    }
     if (!showInitials) {
       canvas.restore();
       return;
@@ -155,4 +158,24 @@ class _MarkerPainter extends CustomPainter {
       identity.shape != old.identity.shape ||
       hollow != old.hollow ||
       showInitials != old.showInitials;
+}
+
+Path _softPolygon(List<Offset> points) {
+  final path = Path();
+  for (var i = 0; i < points.length; i++) {
+    final vertex = points[i];
+    final before = Offset.lerp(
+      vertex,
+      points[(i - 1 + points.length) % points.length],
+      .28,
+    )!;
+    final after = Offset.lerp(vertex, points[(i + 1) % points.length], .28)!;
+    if (i == 0) {
+      path.moveTo(before.dx, before.dy);
+    } else {
+      path.lineTo(before.dx, before.dy);
+    }
+    path.quadraticBezierTo(vertex.dx, vertex.dy, after.dx, after.dy);
+  }
+  return path..close();
 }
