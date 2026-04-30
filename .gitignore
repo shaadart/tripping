@@ -48,6 +48,16 @@ app.*.map.json
 /AI_CONTEXT/
 /CLAUDE.md
 /Claude.md
+/claude.md
+AGENTS.md
+agents.md
+CLAUDE.local.md
+AGENTS.local.md
+/.agents/
+/.claude/
+/.codex/
+/.graphify*
+/graphify-out/
 
 # Private publication/recovery artifacts. Never publish protected originals.
 /.publication-private/
