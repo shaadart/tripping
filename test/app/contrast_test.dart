@@ -59,9 +59,40 @@ void main() {
           'button label': (scheme.onPrimary, scheme.primary),
           'ember text on surface': (scheme.primary, scheme.surface),
           'warning on surface': (extras.warning, scheme.surface),
+          'error on surface': (scheme.error, scheme.surface),
+          'error on raised': (scheme.error, scheme.surfaceContainerHighest),
+          'error label': (scheme.onError, scheme.error),
+          'ink on raised': (scheme.onSurface, scheme.surfaceContainerHighest),
+          'muted on raised': (
+            scheme.onSurfaceVariant,
+            scheme.surfaceContainerHighest,
+          ),
+          'ink on selected tint': (
+            scheme.onPrimaryContainer,
+            scheme.primaryContainer,
+          ),
+          'river on selected tint': (
+            scheme.onSecondaryContainer,
+            scheme.secondaryContainer,
+          ),
+          'moss on selected tint': (
+            scheme.onTertiaryContainer,
+            scheme.tertiaryContainer,
+          ),
+          'snackbar text': (scheme.onInverseSurface, scheme.inverseSurface),
         };
         for (final MapEntry(key: name, value: (fg, bg)) in pairs.entries) {
           expect(contrast(fg, bg), greaterThanOrEqualTo(4.5), reason: name);
+        }
+      });
+
+      test('a control boundary reads at 3:1 against surface and raised', () {
+        for (final ground in [scheme.surface, scheme.surfaceContainerHighest]) {
+          expect(
+            contrast(scheme.outline, ground),
+            greaterThanOrEqualTo(3),
+            reason: 'outline on $ground',
+          );
         }
       });
 
