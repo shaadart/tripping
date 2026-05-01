@@ -375,7 +375,7 @@ ThemeData trippingLook(Look look) {
         minimumSize: const Size(Touch.min, Touch.min),
         padding: const EdgeInsets.symmetric(horizontal: Space.lg),
         shape: const RoundedRectangleBorder(borderRadius: Corner.smallRadius),
-        foregroundColor: tones.primary,
+        foregroundColor: tones.ink,
         textStyle: text.labelLarge,
       ),
     ),

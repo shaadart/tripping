@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import '../app/components.dart';
 import '../app/theme.dart';
+import '../app/tokens.dart';
 import '../app/identity_marker.dart';
 import '../group/identity.dart';
 import '../group/group_sync.dart';
@@ -821,15 +823,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
         Positioned(
           right: 16,
           bottom: 16,
-          child: Material(
-            color: Theme.of(context).colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            clipBehavior: Clip.antiAlias,
+          child: MapChrome(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -884,16 +878,12 @@ class _MapNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(16),
+    return MapChrome(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Space.md,
+        vertical: Space.sm,
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
-      ),
+      child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
     );
   }
 }

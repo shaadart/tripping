@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../app/components.dart';
+import '../app/tokens.dart';
 import 'map_symbols.dart';
 
 /// Optional explanation: the map itself stays quiet.
@@ -7,21 +9,17 @@ class MapKeyButton extends StatelessWidget {
   const MapKeyButton({super.key});
 
   @override
-  Widget build(BuildContext context) => IconButton.filledTonal(
-    style: IconButton.styleFrom(
-      minimumSize: const Size(48, 48),
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      foregroundColor: Theme.of(context).colorScheme.onSurface,
+  Widget build(BuildContext context) => MapChrome(
+    child: IconButton(
+      tooltip: 'Map symbols',
+      icon: const Icon(Icons.layers_outlined),
+      onPressed: () => showMapKey(context),
     ),
-    tooltip: 'Map symbols',
-    icon: const Icon(Icons.layers_outlined),
-    onPressed: () => showMapKey(context),
   );
 }
 
 Future<void> showMapKey(BuildContext context) => showModalBottomSheet<void>(
   context: context,
-  backgroundColor: Theme.of(context).colorScheme.surface,
   showDragHandle: true,
   isScrollControlled: true,
   constraints: BoxConstraints(
@@ -37,15 +35,20 @@ class _MapKey extends StatelessWidget {
   Widget build(BuildContext context) => SafeArea(
     top: false,
     child: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      padding: const EdgeInsets.fromLTRB(
+        Space.xl,
+        Space.sm,
+        Space.xl,
+        Space.xl,
+      ),
       child: LayoutBuilder(
         builder: (context, box) {
           final columns = MediaQuery.textScalerOf(context).scale(14) > 22
               ? 1
               : 2;
           return Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: Space.md,
+            runSpacing: Space.md,
             children: [
               for (final (index, tile) in <Widget>[
                 const _KeyRow(
@@ -121,15 +124,15 @@ class _KeyRow extends StatelessWidget {
     child: DecoratedBox(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: Corner.mediumRadius,
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           children: [
             SizedBox(height: 48, child: Center(child: sample)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Space.sm),
             Text(
               title,
               textAlign: TextAlign.center,

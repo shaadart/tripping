@@ -25,6 +25,7 @@ import '../group/group_sync.dart';
 import '../group/invite.dart';
 import '../group/identity.dart';
 import '../group/sharing.dart';
+import 'components.dart';
 import 'figure.dart';
 import 'format.dart';
 import 'group_screens.dart';
@@ -34,6 +35,7 @@ import 'identity_marker.dart';
 import 'system_access.dart';
 import 'search_screen.dart';
 import 'theme.dart';
+import 'tokens.dart';
 import 'waypoint_sheet.dart';
 
 /// Seconds without a fix before the screen says so.
@@ -878,14 +880,9 @@ class _RecordScreenState extends State<RecordScreen>
                 Positioned.fill(child: widget.mapBuilder(state, now)),
                 if (widget.waypoints != null && state is Recording)
                   Positioned(
-                    left: 16,
-                    bottom: 16,
-                    child: Material(
-                      color: scheme.surface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        side: BorderSide(color: scheme.outlineVariant),
-                      ),
+                    left: Space.gutter,
+                    bottom: Space.lg,
+                    child: MapChrome(
                       child: TextButton.icon(
                         onPressed: state.latestFix == null
                             ? null
@@ -896,8 +893,7 @@ class _RecordScreenState extends State<RecordScreen>
                         ),
                         label: const Text('Mark'),
                         style: TextButton.styleFrom(
-                          minimumSize: const Size(96, 48),
-                          foregroundColor: scheme.onSurface,
+                          minimumSize: const Size(96, Touch.min),
                         ),
                       ),
                     ),
@@ -909,57 +905,51 @@ class _RecordScreenState extends State<RecordScreen>
                   child: SafeArea(
                     bottom: false,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      padding: const EdgeInsets.fromLTRB(
+                        Space.gutter,
+                        Space.md,
+                        Space.gutter,
+                        0,
+                      ),
                       child: Row(
                         children: [
                           Expanded(
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: Material(
-                                color: scheme.surface,
-                                borderRadius: BorderRadius.circular(18),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 13,
-                                  ),
-                                  child: _Header(state: state),
+                              child: MapChrome(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: Space.lg,
+                                  vertical: Space.md,
                                 ),
+                                child: _Header(state: state),
                               ),
                             ),
                           ),
                           if (widget.settings case final settings?) ...[
-                            const SizedBox(width: 8),
+                            const SizedBox(width: Space.sm),
                             Tooltip(
                               message: 'Your map identity',
-                              child: IconButton(
-                                onPressed: () => _open(
-                                  (_) => IdentityScreen(settings: settings),
-                                ),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: scheme.surface,
-                                  minimumSize: const Size(48, 48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                              child: MapChrome(
+                                child: IconButton(
+                                  onPressed: () => _open(
+                                    (_) => IdentityScreen(settings: settings),
                                   ),
-                                ),
-                                icon: ExcludeSemantics(
-                                  child: IdentityMarker(
-                                    identity: settings.identity.value,
-                                    size: 32,
+                                  icon: ExcludeSemantics(
+                                    child: IdentityMarker(
+                                      identity: settings.identity.value,
+                                      size: 32,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ],
                           if (widget.onToggleHighSun case final toggle?) ...[
-                            const SizedBox(width: 8),
+                            const SizedBox(width: Space.sm),
                             _HighSunButton(onPressed: toggle),
                           ],
-                          const SizedBox(width: 8),
-                          Material(
-                            color: scheme.surface,
-                            borderRadius: BorderRadius.circular(16),
+                          const SizedBox(width: Space.sm),
+                          MapChrome(
                             child: PopupMenuButton<String>(
                               tooltip: 'Map options',
                               icon: const Icon(Icons.more_horiz_rounded),
@@ -1014,17 +1004,7 @@ class _RecordScreenState extends State<RecordScreen>
               ],
             ),
           ),
-          Material(
-            color: scheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              side: BorderSide(
-                color: scheme.outlineVariant.withValues(alpha: .55),
-              ),
-            ),
-            clipBehavior: Clip.antiAlias,
+          SheetSurface(
             child: SafeArea(
               top: false,
               child: ConstrainedBox(
@@ -1063,7 +1043,7 @@ class _RecordScreenState extends State<RecordScreen>
                                         decoration: BoxDecoration(
                                           color: scheme.outlineVariant,
                                           borderRadius: BorderRadius.circular(
-                                            4,
+                                            Space.xs,
                                           ),
                                         ),
                                       ),
@@ -1121,7 +1101,7 @@ class _RecordScreenState extends State<RecordScreen>
                                   padding: const EdgeInsets.only(top: 12),
                                   child: InkWell(
                                     onTap: _toggleDetails,
-                                    borderRadius: BorderRadius.circular(14),
+                                    borderRadius: Corner.smallRadius,
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
                                         vertical: 8,
@@ -1487,13 +1467,9 @@ class _HighSunButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final on = lookOf(context).look == Look.highSun;
-    return Material(
-      color: scheme.surface.withValues(alpha: 0.92),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return MapChrome(
       child: IconButton(
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         onPressed: onPressed,
         isSelected: on,
         icon: const Icon(Icons.wb_sunny_outlined),
@@ -2250,19 +2226,22 @@ class _StatusLine extends StatelessWidget {
             message.startsWith('GPS ±'))) {
       return const SizedBox.shrink();
     }
-    final color = needsAttention
-        ? warningColor(context)
-        : Theme.of(context).colorScheme.onSurfaceVariant;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          message,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: color),
-        ),
-        if (action != null)
-          TextButton(onPressed: action.onPressed, child: Text(action.label)),
-      ],
+    if (needsAttention) {
+      final current = state;
+      return StatusNote(
+        message,
+        tone: current is Recording && current.saveError != null
+            ? NoteTone.error
+            : NoteTone.warning,
+        actionLabel: action?.label,
+        onAction: action?.onPressed,
+      );
+    }
+    return Text(
+      message,
+      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 
@@ -2415,24 +2394,19 @@ class _SystemNotes extends StatelessWidget {
     ];
     if (notes.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: Space.md),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final note in notes)
+          for (final (i, note) in notes.indexed)
             Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : Space.sm),
+              child: StatusNote(
                 note,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: warningColor(context)),
+                actionLabel: i == notes.length - 1 ? 'Open settings' : null,
+                onAction: onOpenAppSettings,
               ),
             ),
-          TextButton(
-            onPressed: onOpenAppSettings,
-            child: const Text('Open settings'),
-          ),
         ],
       ),
     );
@@ -2479,21 +2453,11 @@ class _AccessProblem extends StatelessWidget {
       LocationAccess.granted => ('', '', false),
     };
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            message,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: warningColor(context)),
-          ),
-          TextButton(
-            onPressed: retries ? onRetry : onOpenSettings,
-            child: Text(action),
-          ),
-        ],
+      padding: const EdgeInsets.only(bottom: Space.lg),
+      child: StatusNote(
+        message,
+        actionLabel: action,
+        onAction: retries ? onRetry : onOpenSettings,
       ),
     );
   }
