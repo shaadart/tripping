@@ -27,6 +27,8 @@ import 'package:tripping/recording/location_source.dart';
 import 'package:tripping/recording/recorder.dart';
 import 'package:tripping/recording/simulated_location.dart';
 
+const _live = bool.fromEnvironment('PROBE_LIVE');
+
 class ProbeRelay extends FirebaseRelay {
   bool configured = false;
   int epoch = 0;
@@ -39,6 +41,23 @@ class ProbeRelay extends FirebaseRelay {
   @override
   Future<void> resume() async {
     final current = ++epoch;
+    if (!configured && _live) {
+      // The owner-approved live check (E-063): the real project's client
+      // values come in at build time, never from source; no emulator.
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: String.fromEnvironment('LIVE_API_KEY'),
+          appId: String.fromEnvironment('LIVE_APP_ID'),
+          messagingSenderId: String.fromEnvironment('LIVE_SENDER'),
+          projectId: String.fromEnvironment('LIVE_PROJECT'),
+          databaseURL: String.fromEnvironment('LIVE_DATABASE'),
+        ),
+      );
+      if (const bool.fromEnvironment('PROBE_FIREBASE_LOG')) {
+        FirebaseDatabase.instance.setLoggingEnabled(true);
+      }
+      configured = true;
+    }
     if (!configured) {
       await Firebase.initializeApp(
         options: const FirebaseOptions(

@@ -221,14 +221,16 @@ class GroupSync {
               unawaited(_tell());
               unawaited(onConnected?.call().catchError((Object _) {}));
             }
-          }),
+            // Refused once this phone is no longer a member (it left, or was
+            // removed): nothing to do here, and never an unhandled error.
+          }, onError: (Object _) {}),
         )
         ..add(
           room.ended.listen((ended) {
             if (generation != _generation) return;
             _ended = ended;
             if (ended) _set(ended: true);
-          }),
+          }, onError: (Object _) {}),
         )
         ..add(
           room.entries.listen((entries) {

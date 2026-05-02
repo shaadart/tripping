@@ -192,6 +192,9 @@ Future<void> main(List<String> args) async {
   await fb.call('DELETE', fb.at('$room/presence/$me', token));
   await fb.call('DELETE', fb.at('$room/members/$me', token));
   log('left');
+  // The last one out removes the room; the rules refuse while anyone stays.
+  final (gone, _) = await fb.call('DELETE', fb.at('$room/meta', token));
+  log('room removed: ${gone == 200 ? 'yes' : 'no ($gone): others remain'}');
   fb.client.close(force: true);
   exit(0);
 }

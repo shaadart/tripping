@@ -761,4 +761,17 @@ void main() {
       expect(relay.left, 1);
     },
   );
+
+  test('listeners refused after leaving never surface as errors', () async {
+    relay.reachable = true;
+    final sync = GroupSync(relay);
+    await sync.follow(membership(secret));
+    // As the live relay does once this phone is no longer a member (E-063).
+    relay.endings.addError(StateError('permission-denied'));
+    relay.connection.addError(StateError('permission-denied'));
+    relay.changes.addError(StateError('permission-denied'));
+    await pumpEventQueue();
+    expect(sync.status.value?.problem, isNull);
+    await sync.stop();
+  });
 }
