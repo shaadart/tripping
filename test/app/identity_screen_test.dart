@@ -35,16 +35,16 @@ void main() {
           ),
         ),
       );
-      await tester.enterText(find.byType(TextField), 'Ravi Mehta');
+      await tester.enterText(find.byType(TextField), 'Zoya Khan');
       await tester.tap(find.byTooltip('River'));
       await tester.ensureVisible(find.byTooltip('Rounded square'));
       await tester.tap(find.byTooltip('Rounded square'));
       await tester.pumpAndSettle();
       expect(find.text('River · Gate'), findsNothing);
-      expect(find.byType(IdentityMarker), findsNWidgets(5));
-      await tester.ensureVisible(find.text('Continue'));
+      expect(find.byType(IdentityMarker), findsNWidgets(7));
+      await tester.ensureVisible(find.text("Let's go"));
       await tester.runAsync(() async {
-        await tester.tap(find.text('Continue'));
+        await tester.tap(find.text("Let's go"));
         await Future<void>.delayed(const Duration(milliseconds: 100));
       });
       await tester.pumpAndSettle();
@@ -53,9 +53,42 @@ void main() {
         () => Settings.open(File('${dir.path}/settings.json')),
       );
       expect(again!.identityReady, isTrue);
-      expect(again.identity.value.description, 'Ravi Mehta, River, Gate');
+      expect(again.identity.value.description, 'Zoya Khan, River, Gate');
     },
   );
+
+  testWidgets('the action takes your colour and neighbours never share it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: trippingLook(Look.light),
+        home: IdentityScreen(settings: settings, welcome: true, onSaved: () {}),
+      ),
+    );
+    for (final colour in IdentityColour.values) {
+      await tester.tap(find.byTooltip(colour.label));
+      await tester.pumpAndSettle();
+      final button = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(
+        button.style!.backgroundColor!.resolve({}),
+        Color(colour.argb),
+        reason: colour.label,
+      );
+      final markers = tester
+          .widgetList<IdentityMarker>(find.byType(IdentityMarker))
+          .map((m) => m.identity)
+          .where((i) => i.name == 'Asha' || i.name == 'Tom');
+      expect(markers, hasLength(2));
+      for (final other in markers) {
+        expect(other.colour, isNot(colour));
+      }
+    }
+  });
 
   testWidgets(
     'small phone with 200% text scrolls to comfortable labelled controls',
@@ -94,7 +127,7 @@ void main() {
       }
       expect(tester.takeException(), isNull);
       expect(
-        tester.getSize(find.widgetWithText(FilledButton, 'Continue')).height,
+        tester.getSize(find.widgetWithText(FilledButton, "Let's go")).height,
         greaterThanOrEqualTo(48),
       );
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
@@ -118,9 +151,9 @@ void main() {
       ),
     );
     await tester.enterText(find.byType(TextField), 'Asha');
-    await tester.ensureVisible(find.text('Continue'));
+    await tester.ensureVisible(find.text("Let's go"));
     await tester.runAsync(() async {
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text("Let's go"));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     await tester.pumpAndSettle();
