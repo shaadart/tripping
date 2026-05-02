@@ -8,6 +8,9 @@ import 'figure.dart';
 import '../journey/journey_store.dart';
 import '../map/track_geometry.dart';
 import 'format.dart';
+import 'components.dart';
+import 'tokens.dart';
+import '../map/map_symbols.dart';
 
 /// One past journey: its track on the map and its numbers. Pops `true` when
 /// the journey was deleted.
@@ -75,6 +78,9 @@ class _JourneyScreenState extends State<JourneyScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -127,8 +133,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
               },
             ),
           ),
-          Material(
-            color: scheme.surface,
+          SheetSurface(
             child: SafeArea(
               top: false,
               child: ConstrainedBox(
@@ -136,22 +141,52 @@ class _JourneyScreenState extends State<JourneyScreen> {
                   maxHeight: MediaQuery.sizeOf(context).height * 0.45,
                 ),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.gutter,
+                    Space.lg,
+                    Space.gutter,
+                    Space.lg,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
                         children: [
+                          Icon(
+                            journey.mode == JourneyMode.road
+                                ? Icons.directions_car_outlined
+                                : Icons.hiking,
+                            size: 20,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: Space.sm),
                           Expanded(
-                            child: Figure(
-                              value: clockTime(past.recordedTime),
-                              label: 'Time',
+                            child: Text(
+                              [
+                                modeName(journey.mode),
+                                if (journey.endedAt case final ended?)
+                                  'ended ${timeOfDay(context, ended)}',
+                              ].join(' · '),
+                              style: text.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: Space.md),
+                      Row(
+                        children: [
                           Expanded(
                             child: Figure(
                               value: kilometres(past.meters),
                               label: 'Distance',
+                            ),
+                          ),
+                          Expanded(
+                            child: Figure(
+                              value: clockTime(past.recordedTime),
+                              label: 'Time',
                             ),
                           ),
                           Expanded(
@@ -162,49 +197,31 @@ class _JourneyScreenState extends State<JourneyScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        [
-                          modeName(journey.mode),
-                          if (journey.endedAt case final ended?)
-                            'ended ${timeOfDay(context, ended)}',
-                        ].join(' · '),
-                        style: text.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
                       if (parts > 1)
                         Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Recorded in $parts parts. Nothing is known between '
-                            'them, so they are not joined or counted.',
-                            style: text.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                          padding: const EdgeInsets.only(top: Space.md),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.more_horiz_rounded,
+                                size: 20,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: Space.sm),
+                              Expanded(
+                                child: Text(
+                                  'Recorded in $parts parts. Nothing is known '
+                                  'between them, so they are not joined or '
+                                  'counted.',
+                                  style: text.bodyMedium?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      FutureBuilder(
-                        future: _elevation,
-                        builder: (context, snapshot) => switch (snapshot.data) {
-                          final profile? => Padding(
-                            padding: const EdgeInsets.only(top: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  'Climb ${climbText(profile.climb)} · '
-                                  'Descent ${climbText(profile.descent)}',
-                                  style: text.bodyLarge,
-                                ),
-                                const SizedBox(height: 8),
-                                ElevationChart(profile: profile),
-                              ],
-                            ),
-                          ),
-                          null => const SizedBox.shrink(),
-                        },
-                      ),
                       FutureBuilder(
                         future: _loaded,
                         builder: (context, snapshot) => switch (snapshot.data) {
@@ -214,6 +231,27 @@ class _JourneyScreenState extends State<JourneyScreen> {
                             track: track,
                           ),
                           _ => const SizedBox.shrink(),
+                        },
+                      ),
+                      FutureBuilder(
+                        future: _elevation,
+                        builder: (context, snapshot) => switch (snapshot.data) {
+                          final profile? => Padding(
+                            padding: const EdgeInsets.only(top: Space.lg),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  'Climb ${climbText(profile.climb)} · '
+                                  'Descent ${climbText(profile.descent)}',
+                                  style: text.bodyLarge,
+                                ),
+                                const SizedBox(height: Space.sm),
+                                ElevationChart(profile: profile),
+                              ],
+                            ),
+                          ),
+                          null => const SizedBox.shrink(),
                         },
                       ),
                       FutureBuilder(
@@ -235,7 +273,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
 }
 
 /// Where the journey was going, the way planned, and whether the track
-/// got there.
+/// got there: the pin as on the map, and a mark that says it at a glance.
 class _Destination extends StatelessWidget {
   const _Destination({
     required this.mode,
@@ -254,29 +292,33 @@ class _Destination extends StatelessWidget {
     final meters = route.meters;
     final there = reached(track, route.latitude, route.longitude);
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.only(top: Space.lg),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.flag_circle_outlined, size: 20, color: scheme.secondary),
-          const SizedBox(width: 8),
+          const SizedBox(
+            width: 40,
+            child: MapSymbolGlyph(MapSymbol.destination),
+          ),
+          const SizedBox(width: Space.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('To ${route.destination}', style: text.bodyLarge),
                 Text(
-                  [
-                    switch ((route.kind, meters)) {
-                      (RouteKind.road, final meters?) =>
-                        'Planned ${kilometres(meters)} ${wayWords(mode)}',
-                      (RouteKind.straight, final meters?) =>
-                        '${kilometres(meters)} in a straight line, '
-                            '${notAWay(mode)}',
-                      _ => 'No way was planned',
-                    },
-                    there ? 'Reached' : 'Not reached',
-                  ].join(' · '),
+                  'To ${route.destination}',
+                  style: text.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  switch ((route.kind, meters)) {
+                    (RouteKind.road, final meters?) =>
+                      'Planned ${kilometres(meters)} ${wayWords(mode)}',
+                    (RouteKind.straight, final meters?) =>
+                      '${kilometres(meters)} in a straight line, '
+                          '${notAWay(mode)}',
+                    _ => 'No way was planned',
+                  },
                   style: text.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -284,13 +326,55 @@ class _Destination extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: Space.sm),
+          _Badge(
+            label: there ? 'Reached' : 'Not reached',
+            icon: there ? Icons.check_rounded : Icons.remove_rounded,
+            colour: there ? scheme.primary : scheme.onSurfaceVariant,
+          ),
         ],
       ),
     );
   }
 }
 
-/// The journey's waypoints, numbered as on the map.
+/// A short verdict in a tinted pill.
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, required this.icon, required this.colour});
+  final String label;
+  final IconData icon;
+  final Color colour;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: colour.withValues(alpha: .12),
+      borderRadius: Corner.smallRadius,
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Space.sm,
+        vertical: Space.xs,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: colour),
+          const SizedBox(width: Space.xs),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: colour,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// The journey's waypoints, numbered and drawn as on the map.
 class _Waypoints extends StatelessWidget {
   const _Waypoints({required this.waypoints});
 
@@ -304,24 +388,29 @@ class _Waypoints extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 16),
-        Text('Waypoints', style: text.titleMedium),
+        const SizedBox(height: Space.lg),
+        Semantics(
+          header: true,
+          child: Text(
+            'Waypoints',
+            style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
         for (final (i, waypoint) in waypoints.indexed)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: Space.sm),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  waypoint.kind == WaypointKind.marked
-                      ? Icons.flag
-                      : Icons.outlined_flag,
-                  size: 20,
-                  color: waypoint.kind == WaypointKind.marked
-                      ? scheme.tertiary
-                      : scheme.secondary,
+                SizedBox(
+                  width: 40,
+                  child: MapSymbolGlyph(
+                    waypoint.kind == WaypointKind.marked
+                        ? MapSymbol.marked
+                        : MapSymbol.planned,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: Space.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,7 +418,9 @@ class _Waypoints extends StatelessWidget {
                       Text(
                         waypoint.name ??
                             'Waypoint ${waypointLabel(waypoint, i)}',
-                        style: text.bodyLarge,
+                        style: text.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       Text(
                         [

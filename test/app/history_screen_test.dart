@@ -143,7 +143,11 @@ void main() {
 
   testWidgets('lists journeys with their numbers', (tester) async {
     await show(tester, FakeHistory([pastWalk(1), pastWalk(2)]));
-    expect(find.text('Expedition · 1.23 km · 0:04:00'), findsNWidgets(2));
+    expect(find.text('Expedition · 0:04:00'), findsNWidgets(2));
+    expect(find.text('1.23 km'), findsNWidgets(2));
+    // Totals of everything kept, the distance first.
+    expect(find.text('2.47 km'), findsOneWidget);
+    expect(find.text('2 journeys · 0:08:00'), findsOneWidget);
     expect(find.byType(CustomPaint), findsWidgets);
   });
 
@@ -151,7 +155,7 @@ void main() {
     tester,
   ) async {
     await show(tester, FakeHistory([pastWalk(1)]));
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
     await tester.pumpAndSettle();
 
     expect(drawn.single, hasLength(2));
@@ -164,7 +168,7 @@ void main() {
     tester,
   ) async {
     await show(tester, FakeHistory([pastWalk(1)]));
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
     await tester.pumpAndSettle();
 
     expect(shownWaypoints, hasLength(2));
@@ -196,11 +200,12 @@ void main() {
     // The walk ends 270 m north of its start.
     final history = FakeHistory([pastWalk(1)])..route = routeTo(280);
     await show(tester, history);
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
     await tester.pumpAndSettle();
     expect(shownRoute?.destination, 'Camp');
     expect(find.text('To Camp'), findsOneWidget);
-    expect(find.text('Planned 6.30 km on foot · Reached'), findsOneWidget);
+    expect(find.text('Planned 6.30 km on foot'), findsOneWidget);
+    expect(find.text('Reached'), findsOneWidget);
   });
 
   testWidgets('a straight line that was never reached says both', (
@@ -209,19 +214,20 @@ void main() {
     final history = FakeHistory([pastWalk(1)])
       ..route = routeTo(2000, kind: RouteKind.straight);
     await show(tester, history);
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
     await tester.pumpAndSettle();
     expect(
-      find.text('6.30 km in a straight line, not along a path · Not reached'),
+      find.text('6.30 km in a straight line, not along a path'),
       findsOneWidget,
     );
+    expect(find.text('Not reached'), findsOneWidget);
   });
 
   testWidgets('without a destination there is no destination line', (
     tester,
   ) async {
     await show(tester, FakeHistory([pastWalk(1)]));
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
     await tester.pumpAndSettle();
     expect(find.textContaining('To '), findsNothing);
     expect(shownRoute, isNull);
@@ -231,7 +237,7 @@ void main() {
     tester,
   ) async {
     await show(tester, FakeHistory([pastWalk(1), pastWalk(2)]));
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00').first);
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
     await tester.pumpAndSettle();
     expect(find.text('Climb 123 m · Descent 45 m'), findsOneWidget);
     expect(find.text('2100 m'), findsOneWidget);
@@ -239,7 +245,7 @@ void main() {
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00').last);
+    await tester.tap(find.byKey(const ValueKey('journey-2')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Climb'), findsNothing);
   });
@@ -247,7 +253,7 @@ void main() {
   testWidgets('deleting asks first, then removes the journey', (tester) async {
     final history = FakeHistory([pastWalk(1)]);
     await show(tester, history);
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Delete journey'));
@@ -277,7 +283,7 @@ void main() {
         exported.add(past.journey.id);
       },
     );
-    await tester.tap(find.text('Expedition · 1.23 km · 0:04:00'));
+    await tester.tap(find.byKey(const ValueKey('journey-7')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Export GPX'));

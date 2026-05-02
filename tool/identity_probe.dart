@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:tripping/app/history_screen.dart';
 import 'package:tripping/app/identity_screen.dart';
 import 'package:tripping/app/record_screen.dart';
 import 'package:tripping/app/settings.dart';
@@ -14,10 +15,12 @@ import 'package:tripping/group/group_sync.dart';
 import 'package:tripping/group/identity.dart';
 import 'package:tripping/group/invite.dart';
 import 'package:tripping/group/sharing.dart';
+import 'package:tripping/history/journey_history.dart';
 import 'package:tripping/journey/journey.dart';
 import 'package:tripping/journey/journey_store.dart';
 import 'package:tripping/map/journey_map.dart';
 import 'package:tripping/map/map_activity.dart';
+import 'package:tripping/map/track_map.dart';
 import 'package:tripping/recording/recorder.dart';
 import 'package:tripping/recording/simulated_location.dart';
 
@@ -142,6 +145,11 @@ Future<void> main() async {
     group: group,
     waypoints: store,
     onMapNetworkChanged: MapActivity.setNetworkEnabled,
+    historyBuilder: (_) => HistoryScreen(
+      history: JourneyHistory(store),
+      trackMapBuilder: (track, waypoints, route) =>
+          TrackMap(track: track, waypoints: waypoints, route: route),
+    ),
     mapBuilder: (state, now) => JourneyMap(
       state: state,
       now: now,
