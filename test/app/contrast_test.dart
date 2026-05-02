@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tripping/app/map_ground.dart';
 import 'package:tripping/app/theme.dart';
+import 'package:tripping/group/identity.dart';
 
 /// WCAG 2 contrast ratio.
 double contrast(Color a, Color b) {
@@ -86,6 +88,40 @@ void main() {
         }
       });
 
+      test('design-system pairings added in DS-3..6 read at 4.5:1', () {
+        final raised = scheme.surfaceContainerHighest;
+        final ground = MapGround.of(look);
+        Color over(Color tint, double alpha, Color base) =>
+            Color.alphaBlend(tint.withValues(alpha: alpha), base);
+        final pairs = {
+          'ember totals on surface': (scheme.primary, scheme.surface),
+          'warning detail on raised': (extras.warning, raised),
+          'reached badge': (
+            scheme.onSurface,
+            over(scheme.primary, .12, raised),
+          ),
+          'not reached badge': (
+            scheme.onSurface,
+            over(scheme.onSurfaceVariant, .12, raised),
+          ),
+          'guide name on ground': (
+            scheme.onSurface,
+            over(ground.land, .88, ground.park),
+          ),
+          'note text on warning tint': (
+            scheme.onSurface,
+            over(extras.warning, .1, raised),
+          ),
+          'note text on error tint': (
+            scheme.onSurface,
+            over(scheme.error, .1, raised),
+          ),
+        };
+        for (final MapEntry(key: name, value: (fg, bg)) in pairs.entries) {
+          expect(contrast(fg, bg), greaterThanOrEqualTo(4.5), reason: name);
+        }
+      });
+
       test('a control boundary reads at 3:1 against surface and raised', () {
         for (final ground in [scheme.surface, scheme.surfaceContainerHighest]) {
           expect(
@@ -123,5 +159,15 @@ void main() {
         trippingLook(Look.light).extension<TrippingLook>()!.trackWidth,
       ),
     );
+  });
+
+  test('white reads on every identity colour (identity action, initials)', () {
+    for (final colour in IdentityColour.values) {
+      expect(
+        contrast(Colors.white, Color(colour.argb)),
+        greaterThanOrEqualTo(4.5),
+        reason: colour.label,
+      );
+    }
   });
 }

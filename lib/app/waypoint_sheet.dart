@@ -71,7 +71,8 @@ class _WaypointSheetState extends State<_WaypointSheet> {
     final scheme = Theme.of(context).colorScheme;
     final marked = waypoint.kind == WaypointKind.marked;
     final accuracy = waypoint.accuracy;
-    return Padding(
+    // Scrolls when large text or the keyboard leaves too little room.
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         Space.gutter,
         0,

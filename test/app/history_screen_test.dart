@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/large_text.dart';
 import 'package:tripping/app/history_screen.dart';
 import 'package:tripping/app/theme.dart';
 import 'package:tripping/history/elevation_profile.dart';
@@ -294,5 +295,23 @@ void main() {
     await tester.tap(find.byTooltip('Export GPX'));
     await tester.pumpAndSettle();
     expect(find.textContaining("Couldn't export"), findsOneWidget);
+  });
+
+  testWidgets('list and detail fit a small phone at 200% text', (tester) async {
+    onSmallPhoneAtDoubleText(tester);
+    final semantics = tester.ensureSemantics();
+    final history = FakeHistory([pastWalk(1), pastWalk(2)])
+      ..route = routeTo(280);
+    await show(tester, history);
+    await expectComfortable(tester);
+    await tester.tap(find.byKey(const ValueKey('journey-1')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Waypoints'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await expectComfortable(tester);
+    semantics.dispose();
   });
 }

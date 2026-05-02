@@ -323,14 +323,14 @@ class _Destination extends StatelessWidget {
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
+                const SizedBox(height: Space.xs),
+                _Badge(
+                  label: there ? 'Reached' : 'Not reached',
+                  icon: there ? Icons.check_rounded : Icons.remove_rounded,
+                  colour: there ? scheme.primary : scheme.onSurfaceVariant,
+                ),
               ],
             ),
-          ),
-          const SizedBox(width: Space.sm),
-          _Badge(
-            label: there ? 'Reached' : 'Not reached',
-            icon: there ? Icons.check_rounded : Icons.remove_rounded,
-            colour: there ? scheme.primary : scheme.onSurfaceVariant,
           ),
         ],
       ),
@@ -361,11 +361,15 @@ class _Badge extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: colour),
           const SizedBox(width: Space.xs),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: colour,
-              fontWeight: FontWeight.w700,
+          Flexible(
+            child: Text(
+              label,
+              // The colour is in the tint and the icon; the word stays ink,
+              // which reads on any tint (E-060).
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

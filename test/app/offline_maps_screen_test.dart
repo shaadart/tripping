@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/large_text.dart';
 import 'package:tripping/app/offline_maps_screen.dart';
 import 'package:tripping/app/theme.dart';
 import 'package:tripping/map/offline_area.dart';
@@ -249,6 +250,18 @@ void main() {
       expect(find.text('Spiti valley'), findsOneWidget);
       expect(find.text('Update all'), findsOneWidget);
     });
+  });
+  testWidgets('empty and listed areas fit a small phone at 200% text', (
+    tester,
+  ) async {
+    onSmallPhoneAtDoubleText(tester);
+    final semantics = tester.ensureSemantics();
+    await show(tester, FakeOfflineMaps());
+    await expectComfortable(tester);
+    await show(tester, FakeOfflineMaps([saved(1, 'Spiti valley')]));
+    expect(find.text('Spiti valley'), findsOneWidget);
+    await expectComfortable(tester);
+    semantics.dispose();
   });
 }
 

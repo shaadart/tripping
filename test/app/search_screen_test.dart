@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/large_text.dart';
 import 'package:tripping/app/search_screen.dart';
 import 'package:tripping/app/theme.dart';
 import 'package:tripping/places/place.dart';
@@ -78,7 +79,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(search.asked, ['lalba']);
     expect(find.text('Lalbagh'), findsOneWidget);
-    expect(find.textContaining('km away'), findsOneWidget);
+    expect(find.text('away'), findsOneWidget);
   });
 
   testWidgets('the field keeps its text while a slow answer comes', (
@@ -147,5 +148,17 @@ void main() {
   testWidgets('credits Photon and OpenStreetMap', (tester) async {
     await show(tester);
     expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
+  });
+
+  testWidgets('results fit a small phone at 200% text', (tester) async {
+    onSmallPhoneAtDoubleText(tester);
+    final semantics = tester.ensureSemantics();
+    await show(tester);
+    await tester.enterText(find.byType(TextField), 'lalbagh');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.text('Lalbagh'), findsOneWidget);
+    await expectComfortable(tester);
+    semantics.dispose();
   });
 }
