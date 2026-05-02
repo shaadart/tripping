@@ -31,6 +31,8 @@ SIGNING_SUFFIXES = (".jks", ".keystore", ".p12", ".pfx", ".mobileprovision")
 ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".gz", ".7z", ".bundle", ".apk", ".aab")
 IMAGE_ROOTS = (
     "assets/", "android/app/src/main/res/", "ios/Runner/Assets.xcassets/", "docs/images/",
+    # Golden images rendered from synthetic test fixtures in the test font (D-058).
+    "test/goldens/",
 )
 IMAGE_SIGNATURES = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")
 

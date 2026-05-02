@@ -57,6 +57,8 @@ class DisclosureCheckTest(unittest.TestCase):
         self.assertTrue(inspect("test.bin", bytes.fromhex("fffeabcd")))
         self.assertTrue(inspect("asset", b"", symlink=True))
         self.assertEqual(inspect("docs/images/demo.png", b"\x89PNG\r\n\x1a\n\x00"), [])
+        self.assertEqual(inspect("test/goldens/screen.png", b"\x89PNG\r\n\x1a\n\x00"), [])
+        self.assertTrue(inspect("test/other/screen.png", b"\x89PNG\r\n\x1a\n\x00"))
 
     def test_staged_check_reads_index_even_if_working_file_has_been_cleaned(self):
         script = Path(__file__).with_name("disclosure_check.py").resolve()
