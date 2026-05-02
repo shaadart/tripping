@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' show Point, min, max;
+import 'dart:math' show Point, min, max, pi;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +21,8 @@ import '../app/waypoint_sheet.dart';
 import '../places/place.dart';
 import '../places/polyline.dart';
 import '../routing/route_planner.dart';
+import 'edge_bubbles.dart';
+import 'edge_geometry.dart';
 import 'map_style.dart';
 import 'map_symbols.dart';
 
@@ -98,6 +100,12 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   Fix? _originDrawn;
   List<(double, double)> _plannedPoints = const [];
   (double, double)? _destinationPoint;
+
+  /// Companions off the map, as bubbles on its edge (Iteration 8).
+  List<(EdgeBubble, List<Companion>)> _bubbles = const [];
+  var _projecting = false;
+  var _projectAgain = false;
+  Size? _projectedFor;
   bool _rested = false;
   static const _waypointSource = 'waypoints';
   static const _routeSource = 'route';
@@ -224,6 +232,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
         ),
       );
       _styleReady = true;
+      _scheduleProjection();
       // Checked on its own clock too: with no journey there are no updates,
       // and a check made while the style was still loading must not stick.
       _syncPolling();
@@ -723,12 +732,140 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   void _groupChanged() {
     final map = _map;
     if (map != null && _styleReady) _serially(() => _drawCompanions(map));
+    _scheduleProjection();
+  }
+
+  /// Works out the edge bubbles again after the camera, the group or the
+  /// map's size changed: one projection at a time, the newest request
+  /// last. Nothing runs on a timer, so a paused journey stays quiet.
+  void _scheduleProjection() {
+    if (_projecting) {
+      _projectAgain = true;
+      return;
+    }
+    _projecting = true;
+    unawaited(() async {
+      try {
+        do {
+          _projectAgain = false;
+          await _project();
+        } while (_projectAgain && mounted);
+      } on Object {
+        // A camera mid-change can refuse; the next change tries again.
+      } finally {
+        _projecting = false;
+      }
+    }());
+  }
+
+  Future<void> _project() async {
+    final map = _map;
+    final status = widget.group?.value;
+    if (map == null || !_styleReady || !mounted || !_visible) return;
+    final companions = [
+      if (status != null && !status.ended)
+        for (final c in status.companions)
+          if (c.shared.fix != null) c,
+    ];
+    if (companions.isEmpty) {
+      if (_bubbles.isNotEmpty) setState(() => _bubbles = const []);
+      return;
+    }
+    final points = await map.toScreenLocationBatch([
+      for (final c in companions)
+        LatLng(c.shared.fix!.latitude, c.shared.fix!.longitude),
+    ]);
+    if (!mounted) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final size = box.size;
+    // Android answers in physical pixels, iOS in logical ones.
+    final ratio = defaultTargetPlatform == TargetPlatform.android
+        ? MediaQuery.devicePixelRatioOf(context)
+        : 1.0;
+    final camera = map.cameraPosition;
+    // The toolbar grows with large text.
+    final top =
+        MediaQuery.paddingOf(context).top +
+        24 +
+        max(48.0, MediaQuery.textScalerOf(context).scale(20) + 24);
+    final centre = Offset(size.width / 2, (top + size.height) / 2);
+    final targets = <EdgeTarget>[];
+    for (final (i, c) in companions.indexed) {
+      final at = Offset(points[i].x / ratio, points[i].y / ratio);
+      final direction = camera == null ? null : _screenDirection(camera, c);
+      // A tilted camera mirrors places behind it onto the far side of the
+      // screen. Where the picture disagrees with the bearing by more than a
+      // right angle, the bearing is believed.
+      final mirrored =
+          direction != null && looksMirrored(at, centre, direction);
+      targets.add(
+        EdgeTarget(
+          c.participant,
+          mirrored ? const Offset(double.nan, double.nan) : at,
+          direction: direction,
+        ),
+      );
+    }
+    // Under the toolbar, and the buttons at the foot of the map, a marker
+    // cannot be seen: those count as off the map too.
+    final placed = placeEdgeBubbles(
+      usable: Rect.fromLTRB(0, top, size.width, size.height),
+      targets: targets,
+      occluders: [
+        Rect.fromLTWH(size.width - 64, size.height - 113, 48, 97),
+        Rect.fromLTWH(16, size.height - 64, 132, 48),
+        Rect.fromLTWH(size.width - 28, size.height - 28, 28, 28),
+      ],
+    );
+    final byId = {for (final c in companions) c.participant: c};
+    _projectedFor = size;
+    setState(() {
+      _bubbles = [
+        for (final bubble in placed)
+          (bubble, [for (final id in bubble.ids) byId[id]!]),
+      ];
+    });
+  }
+
+  /// Which way [c] is on the screen, from the camera's centre and heading:
+  /// used where the camera cannot project their position.
+  static double _screenDirection(CameraPosition camera, Companion c) {
+    final fix = c.shared.fix!;
+    final centre = Fix(
+      time: fix.time,
+      latitude: camera.target.latitude,
+      longitude: camera.target.longitude,
+    );
+    return (centre.bearingTo(fix) - camera.bearing) * pi / 180;
+  }
+
+  /// Brings the companions of a bubble into view, with this phone's
+  /// position when there is one.
+  void _showCompanions(List<Companion> companions) {
+    final map = _map;
+    if (map == null || !_styleReady) return;
+    setState(() => _follow = false);
+    final top = MediaQuery.paddingOf(context).top + 120;
+    _serially(
+      () => fitCamera(
+        map,
+        const [],
+        also: [
+          for (final c in companions)
+            (c.shared.fix!.latitude, c.shared.fix!.longitude),
+          if (_shownFix case final fix?) (fix.latitude, fix.longitude),
+        ],
+        padding: EdgeInsets.fromLTRB(72, top, 88, 120),
+      ),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.group?.removeListener(_groupChanged);
+    _map?.removeListener(_scheduleProjection);
     _routeWatch?.cancel();
     widget.planner?.pending.removeListener(_drawPending);
     _blankTimer?.cancel();
@@ -792,6 +929,16 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     // With no journey there is nothing to follow.
     final following = _follow && widget.state is! Idle;
+    // The panel opening or closing resizes the map without moving the
+    // camera: bubbles are placed again for the new size.
+    if (_bubbles.isNotEmpty && _projectedFor != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final box = mounted ? context.findRenderObject() : null;
+        if (box is RenderBox && box.hasSize && box.size != _projectedFor) {
+          _scheduleProjection();
+        }
+      });
+    }
     return Stack(
       children: [
         // A drag on the map means the user wants to look around: stop
@@ -812,8 +959,10 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
               target: LatLng(20, 0),
               zoom: 1,
             ),
+            trackCameraPosition: true,
             onMapCreated: (map) {
               _map = map;
+              map.addListener(_scheduleProjection);
               map.onFeatureTapped.add(
                 (_, _, id, layerId, _) =>
                     unawaited(_waypointTapped(id, layerId)),
@@ -899,6 +1048,18 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
             ),
           ),
         ),
+        for (final (bubble, companions) in _bubbles)
+          Positioned(
+            left: bubble.centre.dx - EdgeBubbleView.size / 2,
+            top: bubble.centre.dy - EdgeBubbleView.size / 2,
+            child: EdgeBubbleView(
+              bubble: bubble,
+              companions: companions,
+              now: widget.now,
+              here: _shownFix,
+              onShow: () => _showCompanions(companions),
+            ),
+          ),
       ],
     );
   }

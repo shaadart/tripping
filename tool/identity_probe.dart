@@ -57,10 +57,16 @@ Future<void> main() async {
   final maps = offline;
   final look = ValueNotifier(Look.light);
   final textScale = ValueNotifier(1.0);
+  var far = false;
   const MethodChannel('tripping/pause_probe').setMethodCallHandler((
     call,
   ) async {
     switch (call.method) {
+      case 'startRoad':
+        await recorder.start(JourneyMode.road);
+      case 'far':
+        // The next 'companions' places them beyond the map (Iteration 8).
+        far = true;
       case 'start':
         await recorder.start(JourneyMode.expedition);
       case 'pause':
@@ -85,7 +91,7 @@ Future<void> main() async {
         textScale.value = 1;
       case 'companions':
         final journey = (recorder.state as Recording).journey;
-        final invite = Invite.create(journey.uuid, 'Ravi');
+        final invite = Invite.create(journey.uuid, 'Zoya');
         if (await store.membershipOf(journey.id) == null) {
           await store.saveMembership(
             journey.id,
@@ -100,40 +106,43 @@ Future<void> main() async {
         final here = (recorder.state as Recording).progress.lastFix!;
         group.status.value = GroupStatus(
           companions: [
-            for (final (name, colour, shape, lat, lon, seconds) in [
-              (
-                'Asha Rao',
-                IdentityColour.moss,
-                MarkerShape.rosette,
-                0.00065,
-                -0.00085,
-                2,
-              ),
-              (
-                'Meera',
-                IdentityColour.plum,
-                MarkerShape.reed,
-                0.00065,
-                0.00085,
-                60,
-              ),
-              (
-                'Noor',
-                IdentityColour.ochre,
-                MarkerShape.gate,
-                -0.00065,
-                -0.00085,
-                600,
-              ),
-              (
-                'Tom',
-                IdentityColour.slate,
-                MarkerShape.tablet,
-                -0.00065,
-                0.00085,
-                5,
-              ),
-            ])
+            for (final (name, colour, shape, lat, lon, seconds)
+                in far
+                    ? _farAway
+                    : [
+                        (
+                          'Asha Rao',
+                          IdentityColour.moss,
+                          MarkerShape.rosette,
+                          0.00065,
+                          -0.00085,
+                          2,
+                        ),
+                        (
+                          'Meera',
+                          IdentityColour.plum,
+                          MarkerShape.reed,
+                          0.00065,
+                          0.00085,
+                          60,
+                        ),
+                        (
+                          'Noor',
+                          IdentityColour.ochre,
+                          MarkerShape.gate,
+                          -0.00065,
+                          -0.00085,
+                          600,
+                        ),
+                        (
+                          'Tom',
+                          IdentityColour.slate,
+                          MarkerShape.tablet,
+                          -0.00065,
+                          0.00085,
+                          5,
+                        ),
+                      ])
               Companion(
                 participant: name,
                 heardAt: now,
@@ -208,3 +217,14 @@ Future<void> main() async {
     ),
   );
 }
+
+/// Fictional companions about 1.5 km away on every side, and two together
+/// to the north-east: beyond a street-level map, for edge bubbles.
+const _farAway = [
+  ('Asha', IdentityColour.moss, MarkerShape.rosette, 0.0135, 0.0, 5),
+  ('Meera', IdentityColour.plum, MarkerShape.reed, 0.0, 0.014, 40),
+  ('Noor', IdentityColour.ochre, MarkerShape.gate, -0.0135, 0.0, 900),
+  ('Tom', IdentityColour.slate, MarkerShape.tablet, 0.0, -0.014, 5),
+  ('Kabir', IdentityColour.river, MarkerShape.reed, 0.009, 0.009, 8),
+  ('Lena', IdentityColour.clay, MarkerShape.rosette, 0.0095, 0.0088, 12),
+];
