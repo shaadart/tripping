@@ -5,6 +5,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' show setHttpHeaders;
+import 'package:tripping/app/offline_maps_screen.dart';
+import 'package:tripping/map/area_map.dart';
+import 'package:tripping/map/map_tiles.dart';
+import 'package:tripping/map/offline_maps.dart';
+import 'package:tripping/places/place_search.dart';
+import 'package:tripping/routing/route_planner.dart';
+import 'package:tripping/routing/router.dart';
 import 'package:tripping/app/history_screen.dart';
 import 'package:tripping/app/identity_screen.dart';
 import 'package:tripping/app/record_screen.dart';
@@ -34,6 +42,19 @@ Future<void> main() async {
   final location = SimulatedLocation(origin: (12.9763, 77.5929), speed: 0.6);
   final recorder = await Recorder.open(store, location);
   final group = GroupSync(FakeRelay());
+  // Search, routing and offline maps as in the app, so their screens can
+  // be checked; positions stay synthetic.
+  final planner = RoutePlanner(store, ValhallaRouter());
+  OfflineMaps? offline;
+  try {
+    final tiles = await MapTiles.open(documents, settings);
+    MapTiles.current = tiles;
+    offline = MapLibreOfflineMaps(tiles);
+    await setHttpHeaders({'User-Agent': MapTiles.userAgent});
+  } on Object {
+    offline = null;
+  }
+  final maps = offline;
   final look = ValueNotifier(Look.light);
   final textScale = ValueNotifier(1.0);
   const MethodChannel('tripping/pause_probe').setMethodCallHandler((
@@ -145,6 +166,14 @@ Future<void> main() async {
     group: group,
     waypoints: store,
     onMapNetworkChanged: MapActivity.setNetworkEnabled,
+    places: PhotonSearch(),
+    planner: planner,
+    offlineMapsBuilder: maps == null
+        ? null
+        : (_) => OfflineMapsScreen(
+            maps: maps,
+            areaMapBuilder: (onArea) => AreaMap(onArea: onArea),
+          ),
     historyBuilder: (_) => HistoryScreen(
       history: JourneyHistory(store),
       trackMapBuilder: (track, waypoints, route) =>
@@ -154,6 +183,7 @@ Future<void> main() async {
       state: state,
       now: now,
       store: store,
+      planner: planner,
       group: group.status,
       identity: settings.identity.value,
     ),

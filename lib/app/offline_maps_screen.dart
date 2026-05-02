@@ -1,9 +1,15 @@
 import 'dart:async';
 
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../map/offline_area.dart';
 import '../map/offline_maps.dart';
+import 'components.dart';
+import 'map_ground.dart';
+import 'theme.dart';
+import 'tokens.dart';
 
 /// Builds a map that reports the area it shows whenever it comes to rest;
 /// injected so tests need no platform map.
@@ -107,6 +113,9 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -122,10 +131,21 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     final text = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Offline maps')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _add,
-        icon: const Icon(Icons.download_for_offline_outlined),
-        label: const Text('Download an area'),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Space.gutter,
+            Space.sm,
+            Space.gutter,
+            Space.lg,
+          ),
+          child: FilledButton.icon(
+            onPressed: _add,
+            icon: const Icon(Icons.download_for_offline_outlined),
+            label: const Text('Download an area'),
+          ),
+        ),
       ),
       body: FutureBuilder(
         future: _areas,
@@ -140,15 +160,42 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (areas.isEmpty) {
-            return const _Message(
-              'No offline maps yet.\n\nDownload the areas of a trip while you '
-              'have internet. They work without a connection, under your '
-              'track, waypoints and position.',
-            );
+            return const _Empty();
           }
+          final bytes = areas.fold(0, (sum, a) => sum + a.bytes);
           return ListView(
-            padding: const EdgeInsets.only(bottom: 96),
+            padding: const EdgeInsets.fromLTRB(
+              Space.gutter,
+              Space.sm,
+              Space.gutter,
+              Space.lg,
+            ),
             children: [
+              Semantics(
+                label:
+                    '${megabytes(bytes)} of maps in ${areas.length} '
+                    '${areas.length == 1 ? 'area' : 'areas'} on this phone',
+                excludeSemantics: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      megabytes(bytes),
+                      style: text.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    Text(
+                      '${areas.length} '
+                      '${areas.length == 1 ? 'area' : 'areas'} on this phone',
+                      style: text.titleMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               FutureBuilder(
                 future: _newest,
                 builder: (context, snapshot) {
@@ -168,25 +215,16 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                 },
               ),
               for (final area in areas)
-                ListTile(
-                  leading: Icon(
-                    area.complete
-                        ? Icons.offline_pin_outlined
-                        : Icons.downloading_outlined,
-                  ),
-                  title: Text(area.name),
-                  subtitle: Text(
-                    area.complete
+                Padding(
+                  padding: const EdgeInsets.only(top: Space.sm),
+                  child: _AreaCard(
+                    area: area,
+                    detail: area.complete
                         ? '${megabytes(area.bytes)} · saved '
                               '${_day(context, area.savedAt)}'
                         : 'Incomplete (${(area.progress * 100).round()} %): '
                               'delete it and download again',
-                    style: text.bodyMedium,
-                  ),
-                  trailing: IconButton(
-                    onPressed: () => _delete(area),
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Delete ${area.name}',
+                    onDelete: () => _delete(area),
                   ),
                 ),
             ],
@@ -220,16 +258,28 @@ class _UpdateBanner extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final progress = this.progress;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      color: scheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.md),
+      child: MapChrome(
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Newer map data is available', style: text.titleMedium),
-            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.auto_awesome_outlined, color: scheme.primary),
+                const SizedBox(width: Space.sm),
+                Expanded(
+                  child: Text(
+                    'Newer map data is available',
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Space.xs),
             Text(
               '${stale == 1 ? 'One saved area uses' : '$stale saved areas use'} '
               'older map data. They still work offline; update them to add '
@@ -238,16 +288,16 @@ class _UpdateBanner extends StatelessWidget {
             ),
             if (error case final error?)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
+                padding: const EdgeInsets.only(top: Space.sm),
+                child: StatusNote(
                   '$error Nothing was changed.',
-                  style: text.bodyMedium?.copyWith(color: scheme.error),
+                  tone: NoteTone.error,
                 ),
               ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Space.md),
             if (progress != null) ...[
               LinearProgressIndicator(value: progress),
-              const SizedBox(height: 8),
+              const SizedBox(height: Space.sm),
               Text('Updating… ${(progress * 100).round()} %'),
             ] else
               FilledButton.icon(
@@ -274,7 +324,7 @@ class _Message extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(Space.xxl),
       child: Text(
         text,
         textAlign: TextAlign.center,
@@ -282,6 +332,222 @@ class _Message extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// No saved maps: a scrap of map with an empty frame waiting to be filled.
+class _Empty extends StatelessWidget {
+  const _Empty();
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Space.gutter),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              height: 180,
+              width: double.infinity,
+              child: _AreaScrap(area: null, complete: false, progress: 0),
+            ),
+            const SizedBox(height: Space.lg),
+            Text(
+              'No offline maps yet',
+              style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: Space.xs),
+            Text(
+              'Download the areas of a trip while you have internet. They '
+              'work without a connection, under your track, waypoints and '
+              'position.',
+              textAlign: TextAlign.center,
+              style: text.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One saved area: its own shape framed on a scrap of map, its name, size
+/// and age, and a way to remove it.
+class _AreaCard extends StatelessWidget {
+  const _AreaCard({
+    required this.area,
+    required this.detail,
+    required this.onDelete,
+  });
+
+  final OfflineMap area;
+  final String detail;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return MapChrome(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.sm),
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 72,
+              child: _AreaScrap(
+                area: area.area,
+                complete: area.complete,
+                progress: area.progress,
+              ),
+            ),
+            const SizedBox(width: Space.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    area.name,
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    detail,
+                    style: text.bodyMedium?.copyWith(
+                      color: area.complete
+                          ? scheme.onSurfaceVariant
+                          : warningColor(context),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete ${area.name}',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A scrap of map with the area drawn to its true proportions: solid and
+/// ticked once saved, a ring filling up while it is not.
+class _AreaScrap extends StatelessWidget {
+  const _AreaScrap({
+    required this.area,
+    required this.complete,
+    required this.progress,
+  });
+
+  final Area? area;
+  final bool complete;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final ground = MapGround.of(groundLook(context));
+    final scheme = Theme.of(context).colorScheme;
+    return ExcludeSemantics(
+      child: ClipRRect(
+        borderRadius: Corner.smallRadius,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CustomPaint(
+              painter: MapGroundPainter(ground),
+              foregroundPainter: _FramePainter(
+                area,
+                scheme.primary,
+                solid: complete,
+              ),
+            ),
+            if (area != null)
+              Align(
+                alignment: Alignment.bottomRight,
+                child: Padding(
+                  padding: const EdgeInsets.all(Space.xs),
+                  child: complete
+                      ? CircleAvatar(
+                          radius: 10,
+                          backgroundColor: scheme.primary,
+                          child: Icon(
+                            Icons.check_rounded,
+                            size: 14,
+                            color: scheme.onPrimary,
+                          ),
+                        )
+                      : SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 3,
+                            color: warningColor(context),
+                          ),
+                        ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FramePainter extends CustomPainter {
+  const _FramePainter(this.area, this.ink, {required this.solid});
+  final Area? area;
+  final Color ink;
+  final bool solid;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Degrees of longitude shrink away from the equator.
+    final a = area;
+    var ratio = 1.4;
+    if (a != null) {
+      final squeeze = cos((a.south + a.north) / 2 * pi / 180);
+      final tall = a.north - a.south;
+      final wide = (a.east - a.west) * squeeze;
+      if (tall > 0 && wide > 0) ratio = wide / tall;
+    }
+    final room = size.shortestSide * .62;
+    final frame = Rect.fromCenter(
+      center: size.center(Offset.zero),
+      width: ratio >= 1 ? room : room * ratio,
+      height: ratio >= 1 ? room / ratio : room,
+    );
+    canvas.drawRect(
+      frame,
+      Paint()..color = ink.withValues(alpha: solid ? .18 : .06),
+    );
+    final edge = Paint()
+      ..color = ink
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    if (solid) {
+      canvas.drawRect(frame, edge);
+      return;
+    }
+    // Dashed while nothing, or not everything, is saved.
+    final path = Path()..addRect(frame);
+    for (final metric in path.computeMetrics()) {
+      for (var d = 0.0; d < metric.length; d += 10) {
+        canvas.drawPath(metric.extractPath(d, d + 5), edge);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FramePainter old) =>
+      old.area != area || old.ink != ink || old.solid != solid;
 }
 
 /// Pan and zoom to the area to keep, then download it.

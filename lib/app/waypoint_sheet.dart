@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../journey/journey.dart';
 import '../journey/journey_store.dart';
+import '../map/map_symbols.dart';
+import 'components.dart';
 import 'format.dart';
-import 'theme.dart';
+import 'tokens.dart';
 
 /// Names, notes or deletes a waypoint that has just been saved. The place
 /// itself is already on disk when this opens, so closing it loses nothing.
@@ -71,68 +73,87 @@ class _WaypointSheetState extends State<_WaypointSheet> {
     final accuracy = waypoint.accuracy;
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        20,
+        Space.gutter,
         0,
-        20,
-        16 + MediaQuery.viewInsetsOf(context).bottom,
+        Space.gutter,
+        Space.lg + MediaQuery.viewInsetsOf(context).bottom,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            marked ? 'Marked here' : 'Planned point',
-            style: text.titleLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            [
-              coordinatesText(waypoint.latitude, waypoint.longitude),
-              if (accuracy != null) '±${accuracy.round()} m',
-            ].join(' '),
-            style: text.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+          Row(
+            children: [
+              SizedBox(
+                width: 40,
+                child: MapSymbolGlyph(
+                  marked ? MapSymbol.marked : MapSymbol.planned,
+                ),
+              ),
+              const SizedBox(width: Space.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      marked ? 'Marked here' : 'Planned point',
+                      style: text.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      [
+                        coordinatesText(waypoint.latitude, waypoint.longitude),
+                        if (accuracy != null) '±${accuracy.round()} m',
+                      ].join(' '),
+                      style: text.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           if (widget.warning case final warning?)
             Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                warning,
-                style: text.bodyMedium?.copyWith(color: warningColor(context)),
-              ),
+              padding: const EdgeInsets.only(top: Space.md),
+              child: StatusNote(warning),
             ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Space.lg),
           TextField(
             controller: _name,
             autofocus: true,
             textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Name (optional)',
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(labelText: 'Name (optional)'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Space.md),
           TextField(
             controller: _note,
             minLines: 1,
             maxLines: 3,
             textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Note (optional)',
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(labelText: 'Note (optional)'),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Space.lg),
           Row(
             children: [
-              TextButton(onPressed: _delete, child: const Text('Delete')),
-              const Spacer(),
-              FilledButton(
-                onPressed: _save,
-                style: FilledButton.styleFrom(minimumSize: const Size(120, 56)),
-                child: const Text('Save'),
+              TextButton.icon(
+                onPressed: _delete,
+                style: TextButton.styleFrom(foregroundColor: scheme.error),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete'),
+              ),
+              const SizedBox(width: Space.md),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _save,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(Touch.secondary),
+                  ),
+                  child: const Text('Save'),
+                ),
               ),
             ],
           ),

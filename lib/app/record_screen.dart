@@ -327,6 +327,9 @@ class _RecordScreenState extends State<RecordScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.primary,
+            ),
             child: const Text('End journey'),
           ),
         ],
@@ -612,6 +615,9 @@ class _RecordScreenState extends State<RecordScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.primary,
+            ),
             child: const Text('Leave'),
           ),
         ],

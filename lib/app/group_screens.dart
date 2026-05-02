@@ -8,7 +8,9 @@ import 'package:share_plus/share_plus.dart';
 
 import '../group/invite.dart';
 import '../journey/journey.dart';
+import 'components.dart';
 import 'settings.dart';
+import 'tokens.dart';
 import 'identity_screen.dart';
 import 'identity_marker.dart';
 
@@ -20,6 +22,57 @@ const groupNote =
     'Pausing shows them where you paused; ending your journey or leaving '
     'the group stops sharing. Positions are sealed: the relay cannot read '
     'them. Joining is saved on this phone, even without a connection.';
+
+/// [groupNote], one fact at a time, each with the sign that shows it.
+const groupFacts = <(IconData, String)>[
+  (
+    Icons.my_location_rounded,
+    'Everyone in the group sees your position while your journey records.',
+  ),
+  (
+    Icons.pause_circle_outline_rounded,
+    'Pausing shows them where you paused; ending your journey or leaving '
+        'the group stops sharing.',
+  ),
+  (
+    Icons.lock_outline_rounded,
+    'Positions are sealed: the relay cannot read them.',
+  ),
+  (
+    Icons.save_outlined,
+    'Joining is saved on this phone, even without a connection.',
+  ),
+];
+
+/// [groupFacts] as quiet rows.
+class GroupFacts extends StatelessWidget {
+  const GroupFacts({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (icon, fact) in groupFacts)
+          Padding(
+            padding: const EdgeInsets.only(top: Space.md),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ExcludeSemantics(
+                  child: Icon(icon, size: 22, color: scheme.primary),
+                ),
+                const SizedBox(width: Space.md),
+                Expanded(child: Text(fact, style: text.bodyMedium)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 /// The user's name for groups: the one saved, or asked for once. Null if
 /// they back out.
@@ -52,37 +105,57 @@ class InviteScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Invite companions')),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Space.gutter),
         children: [
-          Row(
-            children: [
-              IdentityMarker(identity: invite.identity),
-              const SizedBox(width: 12),
-              Expanded(child: Text(invite.hostName, style: text.titleMedium)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Center(
-            // Dark on white whatever the look: scanners need the contrast.
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(16),
-              child: QrImageView(
-                data: invite.link,
-                size: 240,
-                backgroundColor: Colors.white,
-                semanticsLabel: 'Invite code',
-              ),
+          MapChrome(
+            padding: const EdgeInsets.all(Space.lg),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IdentityMarker(identity: invite.identity, size: 48),
+                    const SizedBox(width: Space.md),
+                    Expanded(
+                      child: Text(
+                        invite.hostName,
+                        style: text.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Space.lg),
+                // Dark on white whatever the look: scanners need the
+                // contrast.
+                ClipRRect(
+                  borderRadius: Corner.mediumRadius,
+                  child: ColoredBox(
+                    color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(Space.lg),
+                      child: QrImageView(
+                        data: invite.link,
+                        size: 232,
+                        backgroundColor: Colors.white,
+                        semanticsLabel: 'Invite code',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Space.md),
+                Text(
+                  'Companions choose "Join a group" and scan this, or open '
+                  'the link you send them.',
+                  style: text.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Companions open Tripping, choose "Join a group" and scan this, '
-            'or open the link you send them.',
-            style: text.bodyLarge,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Space.lg),
           FilledButton.icon(
             onPressed: () => (share ?? _shareText)(
               'Join my group on Tripping:\n${invite.link}',
@@ -90,17 +163,12 @@ class InviteScreen extends StatelessWidget {
             icon: const Icon(Icons.share_outlined),
             label: const Text('Share invite link'),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Anyone with this code or link can join. Share it only with '
-            'your companions.',
-            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          const SizedBox(height: Space.lg),
+          const StatusNote(
+            'Anyone with this code or link can join. Share it only with your '
+            'companions.',
           ),
-          const SizedBox(height: 8),
-          Text(
-            groupNote,
-            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-          ),
+          const GroupFacts(),
         ],
       ),
     );
@@ -178,59 +246,47 @@ class _JoinScreenState extends State<JoinScreen> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
     final invite = _invite;
     return Scaffold(
       appBar: AppBar(title: const Text('Join a group')),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Space.gutter),
         children: [
-          if (invite != null) ...[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: IdentityMarker(identity: invite.identity, size: 64),
-            ),
-            const SizedBox(height: 12),
-          ],
           if (invite == null) ...[
-            Text(
-              'Scan the invite code on a companion\'s phone, or paste the '
-              'invite link they sent you.',
-              style: text.bodyLarge,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _scan,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Scan invite code'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _paste,
-              icon: const Icon(Icons.content_paste),
-              label: const Text('Paste invite link'),
+            Row(
+              children: [
+                Expanded(
+                  child: _JoinTile(
+                    icon: Icons.qr_code_scanner_rounded,
+                    label: 'Scan invite code',
+                    onPressed: _scan,
+                  ),
+                ),
+                const SizedBox(width: Space.md),
+                Expanded(
+                  child: _JoinTile(
+                    icon: Icons.content_paste_rounded,
+                    label: 'Paste invite link',
+                    onPressed: _paste,
+                  ),
+                ),
+              ],
             ),
             if (_problem case final problem?)
               Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  problem,
-                  style: text.bodyMedium?.copyWith(color: scheme.error),
-                ),
+                padding: const EdgeInsets.only(top: Space.md),
+                child: StatusNote(problem, tone: NoteTone.error),
               ),
           ] else ...[
-            Text('Join ${invite.hostName}\'s group?', style: text.titleLarge),
-            const SizedBox(height: 8),
+            Center(child: IdentityMarker(identity: invite.identity, size: 96)),
+            const SizedBox(height: Space.md),
             Text(
-              'Joining is saved on this phone, with your journey.',
-              style: text.bodyLarge,
+              'Join ${invite.hostName}\'s group?',
+              textAlign: TextAlign.center,
+              style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
-            const SizedBox(height: 8),
-            Text(
-              groupNote,
-              style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 24),
+            const GroupFacts(),
+            const SizedBox(height: Space.xl),
             ...switch (widget.place) {
               JoinPlace.startJourney => [
                 FilledButton.icon(
@@ -241,7 +297,7 @@ class _JoinScreenState extends State<JoinScreen> {
                   icon: const Icon(Icons.directions_car_outlined),
                   label: const Text('Join and start a road journey'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: Space.sm),
                 FilledButton.icon(
                   onPressed: () => Navigator.pop<JoinChoice>(context, (
                     invite: invite,
@@ -261,15 +317,57 @@ class _JoinScreenState extends State<JoinScreen> {
                 ),
               ],
               JoinPlace.alreadyInGroup => [
-                Text(
+                const StatusNote(
                   'This journey is already in a group. End it to join '
                   'another.',
-                  style: text.bodyLarge,
                 ),
               ],
             },
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// One way in: a big icon and its name on raised ground.
+class _JoinTile extends StatelessWidget {
+  const _JoinTile({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return MapChrome(
+      child: InkWell(
+        onTap: onPressed,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 132),
+          child: Padding(
+            padding: const EdgeInsets.all(Space.lg),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 40, color: scheme.primary),
+                const SizedBox(height: Space.sm),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -317,22 +415,72 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Scan invite code')),
-    body: MobileScanner(
-      controller: _camera,
-      onDetect: _detected,
-      errorBuilder: (context, error) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            error.errorCode == MobileScannerErrorCode.permissionDenied
-                ? 'Tripping needs the camera to scan the code. Allow it in '
-                      'the system settings, or paste the invite link instead.'
-                : 'The camera could not start. Paste the invite link '
-                      'instead.',
-            textAlign: TextAlign.center,
+    body: Stack(
+      fit: StackFit.expand,
+      children: [
+        MobileScanner(
+          controller: _camera,
+          onDetect: _detected,
+          errorBuilder: (context, error) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(Space.xxl),
+              child: Text(
+                error.errorCode == MobileScannerErrorCode.permissionDenied
+                    ? 'Tripping needs the camera to scan the code. Allow it in '
+                          'the system settings, or paste the invite link instead.'
+                    : 'The camera could not start. Paste the invite link '
+                          'instead.',
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
         ),
-      ),
+        // Where to hold the code: four corners, nothing more.
+        IgnorePointer(
+          child: Center(
+            child: SizedBox.square(
+              dimension: 240,
+              child: CustomPaint(
+                painter: _Viewfinder(Theme.of(context).colorScheme.primary),
+              ),
+            ),
+          ),
+        ),
+      ],
     ),
   );
+}
+
+class _Viewfinder extends CustomPainter {
+  const _Viewfinder(this.ink);
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = ink
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+    const arm = 36.0, r = 18.0;
+    final w = size.width, h = size.height;
+    for (final (x, y, dx, dy) in [
+      (0.0, 0.0, 1.0, 1.0),
+      (w, 0.0, -1.0, 1.0),
+      (0.0, h, 1.0, -1.0),
+      (w, h, -1.0, -1.0),
+    ]) {
+      canvas.drawPath(
+        Path()
+          ..moveTo(x, y + dy * arm)
+          ..lineTo(x, y + dy * r)
+          ..quadraticBezierTo(x, y, x + dx * r, y)
+          ..lineTo(x + dx * arm, y),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Viewfinder old) => old.ink != ink;
 }

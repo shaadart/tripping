@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import '../journey/geo.dart';
 import '../places/place.dart';
 import '../places/place_search.dart';
+import 'components.dart';
 import 'format.dart';
+import 'tokens.dart';
+import '../map/map_symbols.dart';
 
 /// Finds a place to go. Pops the chosen [Place], or nothing.
 class SearchScreen extends StatefulWidget {
@@ -88,31 +91,101 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  /// How far a place is, while the last position still says where we are.
   String? _away(Place place) {
     final near = widget.near;
     if (near == null || !widget.distances) return null;
-    final meters = metersBetween(
-      near.$1,
-      near.$2,
-      place.latitude,
-      place.longitude,
+    return kilometres(
+      metersBetween(near.$1, near.$2, place.latitude, place.longitude),
     );
-    return '${kilometres(meters)} away';
   }
 
-  Widget _list(List<Place> places) => ListView(
-    children: [
-      for (final place in places)
-        ListTile(
-          leading: const Icon(Icons.place_outlined),
-          title: Text(place.name),
-          subtitle: Text(
-            [place.detail, _away(place)].whereType<String>().join(' · '),
+  Widget _list(List<Place> places, {bool recent = false}) {
+    final text = Theme.of(context).textTheme;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(
+        Space.gutter,
+        Space.xs,
+        Space.gutter,
+        Space.lg,
+      ),
+      itemCount: places.length,
+      separatorBuilder: (_, _) => const SizedBox(height: Space.sm),
+      itemBuilder: (context, i) {
+        final place = places[i];
+        final away = _away(place);
+        return MapChrome(
+          child: InkWell(
+            onTap: () => Navigator.pop(context, place),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: Touch.secondary),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Space.md,
+                  vertical: Space.sm,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      child: recent
+                          ? Icon(Icons.history_rounded, color: muted)
+                          : const FittedBox(
+                              child: MapSymbolGlyph(MapSymbol.destination),
+                            ),
+                    ),
+                    const SizedBox(width: Space.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            place.name,
+                            style: text.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (place.detail case final detail?)
+                            Text(
+                              detail,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.bodyMedium?.copyWith(color: muted),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (away != null) ...[
+                      const SizedBox(width: Space.sm),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            away,
+                            style: text.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            'away',
+                            style: text.bodySmall?.copyWith(color: muted),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
-          onTap: () => Navigator.pop(context, place),
-        ),
-    ],
-  );
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +208,8 @@ class _SearchScreenState extends State<SearchScreen> {
           },
           decoration: const InputDecoration(
             hintText: 'Search a place',
-            border: InputBorder.none,
+            prefixIcon: Icon(Icons.search_rounded),
+            isDense: true,
           ),
         ),
         // Always there, so the field is never rebuilt (and emptied) when
@@ -152,6 +226,9 @@ class _SearchScreenState extends State<SearchScreen> {
           Expanded(
             child: switch ((error, results)) {
               (final error?, _) => _Note(
+                icon: error.offline
+                    ? Icons.cloud_off_rounded
+                    : Icons.error_outline_rounded,
                 error.offline
                     ? 'Search needs a connection.\n\nYou can still pick a '
                           'destination on the map: long-press the place and '
@@ -159,6 +236,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     : error.message,
               ),
               (null, final results?) when results.isEmpty => const _Note(
+                icon: Icons.travel_explore_rounded,
                 'Nothing found. Try another spelling, or a nearby town.',
               ),
               (null, final results?) => _list(results),
@@ -168,6 +246,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   final recent = snapshot.data ?? const [];
                   if (recent.isEmpty) {
                     return _Note(
+                      icon: Icons.place_outlined,
                       _query.isEmpty
                           ? 'Type a town, a place or an address.'
                           : 'Keep typing…',
@@ -177,10 +256,24 @@ class _SearchScreenState extends State<SearchScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                        child: Text('Recent', style: text.titleSmall),
+                        padding: const EdgeInsets.fromLTRB(
+                          Space.gutter,
+                          Space.lg,
+                          Space.gutter,
+                          Space.sm,
+                        ),
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            'Recent',
+                            style: text.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: muted,
+                            ),
+                          ),
+                        ),
                       ),
-                      Expanded(child: _list(recent)),
+                      Expanded(child: _list(recent, recent: true)),
                     ],
                   );
                 },
@@ -190,7 +283,7 @@ class _SearchScreenState extends State<SearchScreen> {
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(Space.md),
               child: Text(
                 'Search by Photon · Data © OpenStreetMap contributors',
                 style: text.bodySmall?.copyWith(color: muted),
@@ -203,20 +296,43 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
+/// A quiet moment in the search: a large icon that says what kind, and the
+/// words beneath.
 class _Note extends StatelessWidget {
-  const _Note(this.text);
+  const _Note(this.text, {required this.icon});
 
   final String text;
+  final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyLarge,
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Space.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: .1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 36, color: scheme.primary),
+              ),
+            ),
+            const SizedBox(height: Space.lg),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
