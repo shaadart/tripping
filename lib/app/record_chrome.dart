@@ -6,6 +6,7 @@ import '../recording/recorder.dart';
 import 'components.dart';
 import 'format.dart';
 import 'theme.dart';
+import 'tokens.dart';
 
 class Header extends StatelessWidget {
   const Header({super.key, required this.state});
@@ -116,25 +117,138 @@ class HighSunButton extends StatelessWidget {
   }
 }
 
+/// The idle panel's one question. The two answers below it show themselves.
 class Welcome extends StatelessWidget {
   const Welcome({super.key});
 
   @override
+  Widget build(BuildContext context) => Text(
+    'Where to?',
+    style: Theme.of(
+      context,
+    ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+  );
+}
+
+/// How a journey will be drawn: a way along roads, or ground read by contour.
+enum ModeArt { road, expedition }
+
+/// One answer to "Where to?": a drawn sample of what that journey looks like
+/// on the map, its name, and a tap that starts it.
+class ModeCard extends StatelessWidget {
+  const ModeCard({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.art,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final ModeArt art;
+  final VoidCallback? onPressed;
+
+  @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Where to?', style: text.headlineMedium),
-        const SizedBox(height: 12),
-        Text(
-          'Record a road journey or an expedition. Everything stays on this '
-          'phone, and no internet is needed.',
-          style: text.bodyLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: label,
+      enabled: onPressed != null,
+      excludeSemantics: true,
+      onTap: onPressed,
+      child: Material(
+        color: raisedGround(context),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: Corner.mediumRadius,
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          excludeFromSemantics: true,
+          child: SizedBox(
+            height: 112,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ExcludeSemantics(
+                    child: CustomPaint(
+                      painter: _ModeArtPainter(art, scheme.primary),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(Space.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Icon(icon, color: scheme.primary, size: 28),
+                      const SizedBox(height: Space.xs),
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
+}
+
+/// A route along a road, or contour rings around a summit, drawn faintly in
+/// the corner of the card the way the map will draw them.
+class _ModeArtPainter extends CustomPainter {
+  const _ModeArtPainter(this.art, this.ink);
+  final ModeArt art;
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    Paint stroke(double alpha, double width) => Paint()
+      ..color = ink.withValues(alpha: alpha)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round;
+    switch (art) {
+      case ModeArt.road:
+        final route = Path()
+          ..moveTo(w * .5, h * .5)
+          ..cubicTo(w * .62, h * .4, w * .6, h * .3, w * .76, h * .22)
+          ..cubicTo(w * .86, h * .16, w * .94, h * .12, w * 1.02, h * .08);
+        canvas.drawPath(route, stroke(.16, 9));
+        canvas.drawPath(route, stroke(.5, 3));
+      case ModeArt.expedition:
+        final centre = Offset(w * .78, h * .3);
+        for (var i = 1; i <= 4; i++) {
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: centre,
+              width: w * .12 * i,
+              height: h * .1 * i,
+            ),
+            stroke(.5 - i * .08, 2),
+          );
+        }
+        canvas.drawCircle(
+          centre,
+          3,
+          Paint()..color = ink.withValues(alpha: .6),
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ModeArtPainter old) => old.art != art || old.ink != ink;
 }

@@ -1291,22 +1291,25 @@ class _RecordScreenState extends State<RecordScreen>
     final enabled = !_busy;
     return switch (state) {
       Idle() => [
-        FilledButton.icon(
-          onPressed: enabled
-              ? () => _askFor(() => recorder.start(JourneyMode.road))
-              : null,
-          icon: const Icon(Icons.directions_car_outlined),
-          label: const Text('Road journey'),
+        ActionPair(
+          ModeCard(
+            label: 'Road journey',
+            icon: Icons.directions_car_outlined,
+            art: ModeArt.road,
+            onPressed: enabled
+                ? () => _askFor(() => recorder.start(JourneyMode.road))
+                : null,
+          ),
+          ModeCard(
+            label: 'Expedition',
+            icon: Icons.hiking,
+            art: ModeArt.expedition,
+            onPressed: enabled
+                ? () => _askFor(() => recorder.start(JourneyMode.expedition))
+                : null,
+          ),
         ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: enabled
-              ? () => _askFor(() => recorder.start(JourneyMode.expedition))
-              : null,
-          icon: const Icon(Icons.hiking),
-          label: const Text('Expedition'),
-        ),
-        const SizedBox(height: 4),
+        const SizedBox(height: Space.sm),
         Wrap(
           alignment: WrapAlignment.center,
           children: [
