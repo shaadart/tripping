@@ -5,12 +5,19 @@
 // from the lake and age.
 //
 //   dart run tool/group_peer.dart '<tripping://invite/join?…>' \
-//       [--name 'Computer'] [--minutes 10] [--at lat,lon]
+//       [--name 'Computer'] [--minutes 10] [--at lat,lon] [--emulator]
+//       [--walk metres] [--replay-after N]
 //
-// --at moves it elsewhere; use only public places.
+// --at moves it elsewhere; use only public places. --emulator uses the local
+// emulators instead of the project in google-services.json. It speaks the
+// sealed session/counter protocol (D-059): --walk moves it north each time
+// it speaks; --replay-after N puts its own first box back after N messages,
+// as a replaying relay would, to show the phone refuses it. It prints which
+// of its messages the phone says it has.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:tripping/group/group_keys.dart';
 import 'package:tripping/group/invite.dart';
@@ -39,7 +46,19 @@ Future<void> main(List<String> args) async {
     for (final part in option('at', '${_lake.$1},${_lake.$2}').split(','))
       double.parse(part),
   ];
-  final fb = FirebaseRest.fromSettings();
+  final fb = args.contains('--emulator')
+      ? FirebaseRest.emulator()
+      : FirebaseRest.fromSettings();
+  final walk = double.parse(option('walk', '0'));
+  final replayAfter = int.parse(option('replay-after', '0'));
+  final session = base64Url
+      .encode([for (var i = 0; i < 8; i++) Random.secure().nextInt(256)])
+      .replaceAll('=', '');
+  var counter = 0;
+  String? firstBox;
+  final sentAt = <int, DateTime>{};
+  // The phone's newest accepted message, as a receipt to send back.
+  final receipts = <String, Object?>{};
   final keys = await GroupKeys.derive(invite.secret);
   final (me, token) = await fb.signUp();
   final room = 'rooms/${keys.room}';
@@ -61,31 +80,48 @@ Future<void> main(List<String> args) async {
   var seq = 0;
   Future<void> say() async {
     final before = DateTime.now().millisecondsSinceEpoch;
-    final (status, body) = await fb
-        .call('PUT', fb.at('$room/presence/$me', token), {
-          'seq': ++seq,
-          'at': FirebaseRest.now,
-          'box': await keys.seal(
-            Shared(
-              name: name,
-              phase: JourneyPhase.recording,
-              mode: JourneyMode.expedition,
-              fix: Fix(
-                time: DateTime.now().toUtc(),
-                latitude: atLat,
-                longitude: atLon,
-                accuracy: 5,
-              ),
-            ).toMessage(),
-            me,
-          ),
-        });
+    final now = DateTime.now().toUtc();
+    final c = ++counter;
+    final north = walk * (c - 1);
+    final box = await keys.seal({
+      ...Shared(
+        name: name,
+        phase: JourneyPhase.recording,
+        mode: JourneyMode.expedition,
+        fix: Fix(
+          time: now,
+          latitude: atLat + north / 111195.08,
+          longitude: atLon,
+          accuracy: 5,
+        ),
+        fixArrivedAt: now,
+      ).toMessage(at: now),
+      'q': [session, c],
+      't': now.millisecondsSinceEpoch ~/ 1000,
+      if (receipts.isNotEmpty) 'r': receipts,
+    }, me);
+    firstBox ??= box;
+    final (status, body) = await fb.call(
+      'PUT',
+      fb.at('$room/presence/$me', token),
+      {'seq': ++seq, 'at': FirebaseRest.now, 'box': box},
+    );
     final after = DateTime.now().millisecondsSinceEpoch;
     if (status == 200) {
       final at = (jsonDecode(body) as Map)['at'] as int;
       offset = at - (before + after) ~/ 2;
+      sentAt[c] = now;
     }
-    log('said here seq=$seq: $status');
+    log('said counter=$c ${north.round()} m north seq=$seq: $status');
+    if (replayAfter > 0 && c == replayAfter) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      final (replayed, _) = await fb.call(
+        'PUT',
+        fb.at('$room/presence/$me', token),
+        {'seq': ++seq, 'at': FirebaseRest.now, 'box': firstBox},
+      );
+      log('REPLAYED counter=1 box with a new relay time, seq=$seq: $replayed');
+    }
   }
 
   Future<void> heard(Map<Object?, Object?> presence) async {
@@ -98,6 +134,21 @@ Future<void> main(List<String> args) async {
       if (shared == null || at is! int) {
         log('an entry that does not open (from ${'$key'.substring(0, 6)})');
         continue;
+      }
+      if (message!['q'] case [final String s, final int c]) {
+        receipts['$key'.length <= 8 ? '$key' : '$key'.substring(0, 8)] = [
+          s.substring(0, 4),
+          c,
+        ];
+      }
+      final mine = me.length <= 8 ? me : me.substring(0, 8);
+      if (message['r'] case final Map<String, Object?> told) {
+        if (told[mine] case [
+          final String s,
+          final int c,
+        ] when s == session.substring(0, 4)) {
+          log('the phone says it has counter=$c (sent ${sentAt[c]})');
+        }
       }
       final fix = shared.fix;
       final lake = Fix(time: DateTime.now(), latitude: atLat, longitude: atLon);

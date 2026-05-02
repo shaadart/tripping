@@ -60,6 +60,10 @@ class ProbeRelay extends FirebaseRelay {
         9000,
         automaticHostMapping: false,
       );
+      // Diagnostics for connection drops; test package only.
+      if (const bool.fromEnvironment('PROBE_FIREBASE_LOG')) {
+        FirebaseDatabase.instance.setLoggingEnabled(true);
+      }
       configured = true;
     }
     if (current == epoch) await super.resume();
@@ -105,14 +109,18 @@ Future<void> main() async {
   final documents = await getApplicationDocumentsDirectory();
   final store = JourneyStore.file(File('${documents.path}/journeys.sqlite'));
   final settings = await Settings.open(File('${documents.path}/settings.json'));
-  await settings.setName('Ravi');
+  await settings.setName('Zoya');
   final location = ProbeLocation();
   final recorder = await Recorder.open(store, location);
   // Only the isolated probe's new recording gets a fictional test group.
   recorder.changes.listen((state) async {
     if (state is Recording &&
         await store.membershipOf(state.journey.id) == null) {
-      final invite = Invite.create(state.journey.uuid, 'Ravi');
+      final invite = Invite.create(state.journey.uuid, 'Zoya');
+      // For the computer peer only: an emulator-only, fictional test group.
+      await File(
+        '${documents.path}/probe_invite.txt',
+      ).writeAsString(invite.link);
       await store.saveMembership(
         state.journey.id,
         groupId: invite.groupId,
