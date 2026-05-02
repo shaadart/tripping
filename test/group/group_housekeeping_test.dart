@@ -71,4 +71,33 @@ void main() {
     expect(relay.opened, isEmpty);
     expect(relay.roomsLeft, isEmpty);
   });
+
+  test('a room left offline is cleared at the next connection', () async {
+    final cleared = <String>[];
+    relay.failLeavingRooms = true;
+    expect(
+      await tidyGroups(
+        store,
+        relay,
+        now: t0,
+        pendingRooms: ['room-1'],
+        onRoomLeft: (room) async => cleared.add(room),
+      ),
+      0,
+    );
+    expect(cleared, isEmpty, reason: 'still offline: kept for next time');
+    relay.failLeavingRooms = false;
+    expect(
+      await tidyGroups(
+        store,
+        relay,
+        now: t0,
+        pendingRooms: ['room-1'],
+        onRoomLeft: (room) async => cleared.add(room),
+      ),
+      1,
+    );
+    expect(relay.roomsLeft, ['room-1']);
+    expect(cleared, ['room-1']);
+  });
 }

@@ -19,6 +19,7 @@ class Settings {
     MarkerShape shape = MarkerShape.tablet,
     bool identityReady = false,
     Set<String> sharingPaused = const {},
+    Set<String> pendingLeaves = const {},
   }) : highSun = ValueNotifier(highSun),
        tileRelease = ValueNotifier(tileRelease),
        _participantId = participantId,
@@ -32,7 +33,8 @@ class Settings {
          shape: shape,
        ),
        _identityReady = identityReady,
-       _sharingPaused = sharingPaused;
+       _sharingPaused = sharingPaused,
+       _pendingLeaves = {...pendingLeaves};
 
   /// Reads [file]; a missing or unreadable file means the defaults.
   static Future<Settings> open(File file) async {
@@ -44,6 +46,7 @@ class Settings {
     var shape = MarkerShape.tablet;
     bool? identityReady;
     var sharingPaused = <String>{};
+    var pendingLeaves = <String>{};
     try {
       final json = jsonDecode(await file.readAsString());
       if (json is Map) {
@@ -54,6 +57,9 @@ class Settings {
         }
         if (json['sharingPaused'] case final List<Object?> paused) {
           sharingPaused = paused.whereType<String>().toSet();
+        }
+        if (json['pendingLeaves'] case final List<Object?> rooms) {
+          pendingLeaves = rooms.whereType<String>().toSet();
         }
         if (json['highSun'] is bool) highSun = json['highSun'] as bool;
         if (json['tileRelease'] is String) {
@@ -81,6 +87,7 @@ class Settings {
       shape: shape,
       identityReady: identityReady ?? name != null,
       sharingPaused: sharingPaused,
+      pendingLeaves: pendingLeaves,
     );
   }
 
@@ -102,6 +109,20 @@ class Settings {
 
   String? _participantId;
   final Set<String> _sharingPaused;
+  final Set<String> _pendingLeaves;
+
+  /// Relay rooms this phone left while the relay could not confirm removing
+  /// its entries: room names only, never a group's secret.
+  Set<String> get pendingLeaves => Set.unmodifiable(_pendingLeaves);
+
+  Future<void> addPendingLeave(String room) async {
+    if (_pendingLeaves.add(room)) await _save();
+  }
+
+  Future<void> removePendingLeave(String room) async {
+    if (_pendingLeaves.remove(room)) await _save();
+  }
+
   Future<void> _writes = Future.value();
 
   bool sharingPaused(String journey) => _sharingPaused.contains(journey);
@@ -170,6 +191,7 @@ class Settings {
       jsonEncode({
         'highSun': highSun.value,
         if (_sharingPaused.isNotEmpty) 'sharingPaused': _sharingPaused.toList(),
+        if (_pendingLeaves.isNotEmpty) 'pendingLeaves': _pendingLeaves.toList(),
         'tileRelease': ?tileRelease.value,
         'participantId': ?_participantId,
         if (identityOverride != null || name.value != null || _identityReady)

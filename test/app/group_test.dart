@@ -317,8 +317,10 @@ void main() {
       ),
     );
     await settle(tester);
+    // Once the relay accepts the position, the line says so (server
+    // acknowledgement), not merely that a connection exists.
     expect(
-      find.text('Connected · sharing your position with the group'),
+      find.textContaining('Connected · the group received your position'),
       findsOneWidget,
     );
     expect(relay.published, hasLength(1), reason: 'said "here" on joining');

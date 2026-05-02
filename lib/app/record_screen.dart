@@ -537,6 +537,7 @@ class _RecordScreenState extends State<RecordScreen>
         phase: phase,
         mode: journey.mode,
         fix: progress.lastFix,
+        fixArrivedAt: progress.lastFixArrivedAt,
       ),
     );
   }
@@ -624,7 +625,16 @@ class _RecordScreenState extends State<RecordScreen>
       ),
     );
     if (!(sure ?? false)) return;
-    await widget.group?.leave();
+    // Sharing stops now. If the relay could not confirm removing this
+    // phone's last position, it is removed at the next connection.
+    final unconfirmed = await widget.group?.leave();
+    if (unconfirmed != null) {
+      await widget.settings?.addPendingLeave(unconfirmed);
+      _tell(
+        'Left the group. Your last position is removed from it as soon as '
+        'Tripping is online.',
+      );
+    }
     await store.deleteMembership(membership.journeyId);
   }
 

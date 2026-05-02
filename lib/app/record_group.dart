@@ -87,6 +87,9 @@ class GroupLine extends StatelessWidget {
                         'resumes when the connection returns',
                   GroupStatus(connected: false) =>
                     "Not connected: the group can't see this phone now",
+                  GroupStatus(connected: true, :final sentAt?) =>
+                    'Connected · the group received your position '
+                        '${age(_atLeastZero(now.difference(sentAt)))} ago',
                   GroupStatus(connected: true) =>
                     'Connected · sharing your position with the group',
                 },
@@ -190,6 +193,9 @@ class GroupLine extends StatelessWidget {
           Freshness.stale => 'last seen ${age(old)} ago',
           _ => '${age(old)} ago',
         },
+        // Their own word that they have this phone's position, and which.
+        if (companion.hasMineFrom case final mine?)
+          'has yours from ${age(_atLeastZero(now.difference(mine)))} ago',
       ].join(' · '),
       style: freshness == Freshness.live ? text.bodyMedium : muted,
     );

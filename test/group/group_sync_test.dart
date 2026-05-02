@@ -450,4 +450,315 @@ void main() {
     expect(readAt.difference(said.fix!.time).isNegative, isTrue);
     await sync.stop();
   });
+
+  group('trustworthy sharing (Iteration 7)', () {
+    late GroupKeys keys;
+    late GroupSync sync;
+    var now = t0;
+
+    Shared asha({Fix? fix, JourneyPhase phase = JourneyPhase.recording}) =>
+        Shared(
+          name: 'Asha',
+          phase: phase,
+          mode: JourneyMode.road,
+          fix: fix ?? fixAt(0, 100),
+        );
+
+    /// A sealed entry as a session-aware sender writes it: [sentAt] on the
+    /// sender's clock, [relayAt] on the relay's.
+    Future<RelayEntry> said(
+      Shared shared, {
+      required String session,
+      required int counter,
+      required DateTime sentAt,
+      required DateTime relayAt,
+      int seq = 1,
+      Map<String, Object?>? receipts,
+      bool legacy = false,
+    }) async => RelayEntry(
+      participant: 'a',
+      seq: seq,
+      at: relayAt,
+      box: await keys.seal({
+        ...shared.toMessage(at: sentAt),
+        if (!legacy) 'q': [session, counter],
+        if (!legacy) 't': sentAt.millisecondsSinceEpoch ~/ 1000,
+        'r': ?receipts,
+      }, 'a'),
+    );
+
+    Future<void> deliver(List<RelayEntry> entries) async {
+      relay.changes.add(entries);
+      await pumpEventQueue();
+    }
+
+    double shownNorth() =>
+        (sync.status.value!.companions.single.shared.fix!.latitude - 11.4) *
+        metersPerDegree;
+
+    setUp(() async {
+      now = t0;
+      keys = await GroupKeys.derive(secret);
+      sync = GroupSync(relay, clock: () => now);
+      await sync.follow(membership(secret));
+    });
+    tearDown(() => sync.stop());
+
+    test('a replayed older box with a newer relay time is refused', () async {
+      final first = await said(
+        asha(fix: fixAt(0, 100)),
+        session: 's1',
+        counter: 1,
+        sentAt: t0,
+        relayAt: t0,
+      );
+      await deliver([
+        await said(
+          asha(fix: fixAt(10, 300)),
+          session: 's1',
+          counter: 2,
+          sentAt: t0.add(const Duration(seconds: 10)),
+          relayAt: t0.add(const Duration(seconds: 10)),
+          seq: 2,
+        ),
+      ]);
+      // The relay (or anyone able to write the slot) puts the first box
+      // back, stamped later.
+      await deliver([
+        RelayEntry(
+          participant: 'a',
+          seq: 3,
+          at: t0.add(const Duration(minutes: 5)),
+          box: first.box,
+        ),
+      ]);
+      expect(shownNorth(), closeTo(300, 1));
+    });
+
+    test('a duplicate counter in the same session changes nothing', () async {
+      await deliver([
+        await said(
+          asha(fix: fixAt(0, 100)),
+          session: 's1',
+          counter: 4,
+          sentAt: t0,
+          relayAt: t0,
+        ),
+      ]);
+      await deliver([
+        await said(
+          asha(fix: fixAt(5, 900)),
+          session: 's1',
+          counter: 4,
+          sentAt: t0.add(const Duration(seconds: 5)),
+          relayAt: t0.add(const Duration(seconds: 5)),
+          seq: 2,
+        ),
+      ]);
+      expect(shownNorth(), closeTo(100, 1));
+    });
+
+    test('a restarted sender (new session, counter from 1) is heard', () async {
+      await deliver([
+        await said(
+          asha(fix: fixAt(0, 100)),
+          session: 's1',
+          counter: 40,
+          sentAt: t0,
+          relayAt: t0,
+        ),
+      ]);
+      await deliver([
+        await said(
+          // Resumed after a restart: the same last fix, now paused.
+          asha(fix: fixAt(0, 100), phase: JourneyPhase.paused),
+          session: 's2',
+          counter: 1,
+          sentAt: t0.add(const Duration(minutes: 3)),
+          relayAt: t0.add(const Duration(minutes: 3)),
+          seq: 1,
+        ),
+      ]);
+      expect(
+        sync.status.value!.companions.single.shared.phase,
+        JourneyPhase.paused,
+      );
+    });
+
+    test('an old session replayed after a newer one is refused', () async {
+      final old = await said(
+        asha(fix: fixAt(0, 100)),
+        session: 's1',
+        counter: 9,
+        sentAt: t0,
+        relayAt: t0,
+      );
+      await deliver([
+        await said(
+          asha(fix: fixAt(60, 500)),
+          session: 's2',
+          counter: 1,
+          sentAt: t0.add(const Duration(minutes: 1)),
+          relayAt: t0.add(const Duration(minutes: 1)),
+        ),
+      ]);
+      await deliver([
+        RelayEntry(
+          participant: 'a',
+          seq: 2,
+          at: t0.add(const Duration(minutes: 2)),
+          box: old.box,
+        ),
+      ]);
+      expect(shownNorth(), closeTo(500, 1));
+    });
+
+    test('once a sender uses sessions, a box without one is refused', () async {
+      await deliver([
+        await said(
+          asha(fix: fixAt(0, 100)),
+          session: 's1',
+          counter: 1,
+          sentAt: t0,
+          relayAt: t0,
+        ),
+      ]);
+      await deliver([
+        await said(
+          asha(fix: fixAt(30, 700)),
+          session: '',
+          counter: 0,
+          sentAt: t0.add(const Duration(seconds: 30)),
+          relayAt: t0.add(const Duration(seconds: 30)),
+          seq: 2,
+          legacy: true,
+        ),
+      ]);
+      expect(shownNorth(), closeTo(100, 1));
+    });
+
+    test('snapshots arriving together leave the newest, whatever the order '
+        'they finish', () async {
+      final entries = [
+        for (var c = 1; c <= 5; c++)
+          await said(
+            asha(fix: fixAt(c, c * 100.0)),
+            session: 's1',
+            counter: c,
+            sentAt: t0.add(Duration(seconds: c)),
+            relayAt: t0.add(Duration(seconds: c)),
+            seq: c,
+          ),
+      ];
+      // Newest first, then older ones: none may win over counter 5.
+      for (final entry in [entries[4], ...entries.take(4)]) {
+        relay.changes.add([entry]);
+      }
+      await pumpEventQueue();
+      expect(shownNorth(), closeTo(500, 1));
+    });
+
+    test('the age is right when the sender\'s wall clock and GNSS disagree '
+        'by an hour', () async {
+      // GNSS says the fix is from t0; the sender's wall clock runs an hour
+      // fast. The fix reached the sender 20 s before it was sent.
+      final senderWall = t0.add(const Duration(hours: 1));
+      final shared = Shared(
+        name: 'Asha',
+        phase: JourneyPhase.recording,
+        mode: JourneyMode.road,
+        fix: fixAt(0, 100),
+        fixArrivedAt: senderWall.subtract(const Duration(seconds: 20)),
+      );
+      expect(shared.toMessage(at: senderWall)['o'], 20);
+      // Without the arrival time the age would have said an hour.
+      expect(
+        Shared(
+          name: 'Asha',
+          phase: JourneyPhase.recording,
+          mode: JourneyMode.road,
+          fix: fixAt(0, 100),
+        ).toMessage(at: senderWall)['o'],
+        3600,
+      );
+    });
+
+    test('says when the relay accepted this phone\'s position', () async {
+      relay.reach(true);
+      await pumpEventQueue();
+      now = t0.add(const Duration(seconds: 7));
+      sync.update(me(fixAt(7, 0)));
+      await pumpEventQueue();
+      expect(relay.published, hasLength(1));
+      expect(sync.status.value!.sentAt, now);
+    });
+
+    test('a companion\'s receipt says which of this phone\'s positions they '
+        'have', () async {
+      relay.reach(true);
+      await pumpEventQueue();
+      now = t0.add(const Duration(seconds: 7));
+      sync.update(me(fixAt(7, 0)));
+      await pumpEventQueue();
+      final mine = (await keys.open(relay.published.single.$2, 'me'))!;
+      final q = mine['q']! as List<Object?>;
+      final (session, counter) = (q[0]! as String, q[1]! as int);
+      await deliver([
+        await said(
+          asha(),
+          session: 's1',
+          counter: 1,
+          sentAt: t0.add(const Duration(seconds: 9)),
+          relayAt: t0.add(const Duration(seconds: 9)),
+          receipts: {
+            'me': [session.substring(0, 4), counter],
+          },
+        ),
+      ]);
+      expect(
+        sync.status.value!.companions.single.hasMineFrom,
+        t0.add(const Duration(seconds: 7)),
+      );
+    });
+
+    test(
+      'a receipt from an earlier run of this phone is not believed',
+      () async {
+        relay.reach(true);
+        await pumpEventQueue();
+        sync.update(me(fixAt(0, 0)));
+        await pumpEventQueue();
+        await deliver([
+          await said(
+            asha(),
+            session: 's1',
+            counter: 1,
+            sentAt: t0.add(const Duration(seconds: 9)),
+            relayAt: t0.add(const Duration(seconds: 9)),
+            receipts: {
+              'me': ['zzzz', 1],
+            },
+          ),
+        ]);
+        expect(sync.status.value!.companions.single.hasMineFrom, isNull);
+      },
+    );
+  });
+
+  test(
+    'leaving offline names the room still to be cleared; online, none',
+    () async {
+      final sync = GroupSync(relay);
+      await sync.follow(membership(secret));
+      relay.failLeaving = true;
+      final room = await sync.leave();
+      expect(room, (await GroupKeys.derive(secret)).room);
+      expect(relay.left, 0);
+
+      await sync.follow(membership(secret));
+      relay.failLeaving = false;
+      expect(await sync.leave(), isNull);
+      expect(relay.left, 1);
+    },
+  );
 }

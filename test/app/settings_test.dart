@@ -92,4 +92,13 @@ void main() {
     expect(lookOf(inner).look, Look.highSun);
     expect(lookOf(inner).mapStyle, 'assets/map/sun.json');
   });
+
+  test('rooms still to be cleared after leaving are remembered', () async {
+    final first = await Settings.open(file);
+    await first.addPendingLeave('room-1');
+    final again = await Settings.open(file);
+    expect(again.pendingLeaves, {'room-1'});
+    await again.removePendingLeave('room-1');
+    expect((await Settings.open(file)).pendingLeaves, isEmpty);
+  });
 }

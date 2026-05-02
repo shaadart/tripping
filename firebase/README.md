@@ -57,8 +57,17 @@ reviewed temporary rules rather than opening a production namespace.
   identity against another key holder. Firebase authorization is the
   boundary that prevents a member writing in another UID's slot.
 - Sequence values must be positive safe integers. They are not required to
-  increase across process restarts; authenticated session/sequence replay
-  protection and location freshness are separate protocol work.
+  increase across process restarts, and the relay's `seq` and `at` are not
+  trusted for ordering. Each sealed message carries a random per-run session
+  and a counter, plus the sender's send time; receivers accept a higher
+  counter in the same session, or a new session sent later by the sender's
+  own clock, and refuse unsessioned messages once a sender has used
+  sessions. A replayed old box is therefore ignored even with a new relay
+  timestamp. A sender whose clock is set back is not heard until it passes
+  its previous send time.
+- Position age is measured on the sender with one clock (when the fix
+  reached the phone to when it was sent), so a disagreement between the
+  phone's wall clock and GNSS time does not change it.
 - The current retention sweep runs on members' phones; there is no server
   expiry task. An unopened room can remain stored.
 - Rules and per-UID write spacing do not prevent all anonymous-account or

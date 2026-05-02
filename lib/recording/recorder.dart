@@ -15,6 +15,7 @@ class Progress {
     required this.closedTime,
     this.openSince,
     this.lastFix,
+    this.lastFixArrivedAt,
     this.climb,
     this.descent,
   });
@@ -34,6 +35,11 @@ class Progress {
 
   /// The newest fix stored for the journey.
   final Fix? lastFix;
+
+  /// When [lastFix] reached this phone, on this phone's clock; null for a fix
+  /// read back from disk. With the send time from the same clock it gives
+  /// the fix's age whatever the GNSS and wall clocks disagree by.
+  final DateTime? lastFixArrivedAt;
 
   /// Time spent recording up to [now], leaving out pauses and interruptions.
   Duration elapsedAt(DateTime now) {
@@ -159,6 +165,7 @@ class Recorder {
   DateTime? _openSince;
   DateTime? _lastEventAt;
   Fix? _lastFix;
+  DateTime? _lastFixArrivedAt;
 
   RecorderState get state => _state;
 
@@ -183,6 +190,7 @@ class Recorder {
     _stats = TrackStats(policy);
     _closedTime = Duration.zero;
     _lastFix = null;
+    _lastFixArrivedAt = null;
     _openSegment(journey, journey.createdAt);
     return access;
   });
@@ -260,6 +268,7 @@ class Recorder {
     final segments = await _store.segmentsOf(journey.id);
     final track = await _store.track(journey.id);
     _lastFix = [for (final segment in track) ...segment].lastOrNull;
+    _lastFixArrivedAt = null;
     _filter = FixFilter(policy, after: _lastFix?.time);
     _stats = TrackStats.replay(policy, track);
     for (final segment in segments) {
@@ -339,6 +348,7 @@ class Recorder {
         case AppendResult.stored:
           _stats!.add(fix);
           _lastFix = fix;
+          _lastFixArrivedAt = arrivedAt;
         case AppendResult.duplicate:
           break;
         case AppendResult.notRecording:
@@ -379,6 +389,7 @@ class Recorder {
     closedTime: _closedTime,
     openSince: _openSince,
     lastFix: _lastFix,
+    lastFixArrivedAt: _lastFixArrivedAt,
     climb: _stats?.elevation.climb,
     descent: _stats?.elevation.descent,
   );

@@ -15,6 +15,7 @@ class Shared {
     required this.mode,
     this.fix,
     this.fixAge,
+    this.fixArrivedAt,
     this.colour = IdentityColour.clay,
     this.shape = MarkerShape.tablet,
   });
@@ -33,6 +34,11 @@ class Shared {
   /// clock says (G4).
   final Duration? fixAge;
 
+  /// Sender side only, never sent: when [fix] reached this phone, on this
+  /// phone's clock. The age sent is measured from it, so the wall clock and
+  /// the GNSS clock may disagree without changing the age (Iteration 7).
+  final DateTime? fixArrivedAt;
+
   /// The message before sealing, sent [at] (the sender's clock): short
   /// keys, about 1 m of precision, under 200 bytes even with a 40-character
   /// name.
@@ -50,7 +56,7 @@ class Shared {
         fix.time.millisecondsSinceEpoch ~/ 1000,
       ],
     if ((fix, at) case (final fix?, final at?))
-      'o': at.difference(fix.time).inSeconds.clamp(0, 86400),
+      'o': at.difference(fixArrivedAt ?? fix.time).inSeconds.clamp(0, 86400),
   };
 
   /// A companion's message, or null when it is not one: damaged, or from a

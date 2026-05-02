@@ -62,8 +62,14 @@ class FakeRelay implements Relay, RelayRoom {
   @override
   Stream<bool> get ended => endings.stream;
 
+  /// Makes leaving fail, as it would offline.
+  var failLeaving = false;
+
   @override
-  Future<void> leave() async => left++;
+  Future<void> leave() async {
+    if (failLeaving) throw StateError('offline');
+    left++;
+  }
 
   final forgotten = <String>[];
   final roomsLeft = <String>[];

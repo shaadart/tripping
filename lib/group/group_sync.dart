@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -16,6 +18,7 @@ class Companion {
     required this.heardAt,
     required this.shared,
     this.stillSince,
+    this.hasMineFrom,
   });
 
   final String participant;
@@ -31,6 +34,10 @@ class Companion {
   /// Since when they have stood still while recording, once that is longer
   /// than two minutes (G6).
   final DateTime? stillSince;
+
+  /// When this phone sent the newest of its positions that they say they
+  /// have, on this phone's clock (peer receipt). Null until they say so.
+  final DateTime? hasMineFrom;
 
   /// When their position was taken, on this phone's clock: the relay's
   /// receipt less its age when sent, so neither phone's clock error
@@ -55,6 +62,7 @@ class GroupStatus {
     this.offlineSince,
     this.refused = false,
     this.suspended = false,
+    this.sentAt,
   });
 
   /// The relay is reachable now.
@@ -75,6 +83,10 @@ class GroupStatus {
 
   /// Since when the relay has been out of reach (this phone's clock).
   final DateTime? offlineSince;
+
+  /// When the relay last accepted this phone's position, on this phone's
+  /// clock (server acknowledgement). Says nothing about who has read it.
+  final DateTime? sentAt;
 
   /// The relay keeps refusing this phone's updates (it may have been
   /// removed, or the group closed).
@@ -126,6 +138,30 @@ class GroupSync {
 
   /// Each companion's newest genuine entry.
   final _heard = <String, ({int seq, DateTime at, Companion companion})>{};
+
+  /// This run's session, sealed into every message with a counter: a
+  /// restarted sender starts a new session instead of reusing numbers, and
+  /// an old box replayed into a slot is recognised as old (Iteration 7).
+  final String _session = _newSession();
+  var _counter = 0;
+
+  /// Per companion, the newest accepted session, counter and send time.
+  final _order = <String, _Order>{};
+
+  /// When each recent counter of this phone was accepted by the relay, for
+  /// matching companions' receipts.
+  final _sentAt = <int, DateTime>{};
+
+  /// Entries waiting to be read, newest snapshot only; read one at a time.
+  List<RelayEntry>? _waiting;
+  var _reading = false;
+
+  static String _newSession() {
+    final random = Random.secure();
+    return base64Url
+        .encode([for (var i = 0; i < 8; i++) random.nextInt(256)])
+        .replaceAll('=', '');
+  }
 
   /// Boxes larger than this are not even opened (the relay's rules allow
   /// 1,024 characters).
@@ -195,77 +231,13 @@ class GroupSync {
           }),
         )
         ..add(
-          room.entries.listen((entries) async {
+          room.entries.listen((entries) {
             if (generation != _generation) return;
-            final silentSince = _clock().subtract(expireAfter);
-            for (final entry in entries) {
-              if (entry.participant == me) continue;
-              // Silent for over a day: gone from the group (G7). Its
-              // entries are removed for everyone, once.
-              if (entry.at.subtract(room.clockOffset).isBefore(silentSince)) {
-                if (_forgotten.add(entry.participant)) {
-                  unawaited(
-                    room.forget(entry.participant).catchError((Object _) {}),
-                  );
-                }
-                continue;
-              }
-              // Duplicates and anything older than what is shown change
-              // nothing (invariant 9).
-              final known = _heard[entry.participant];
-              if (known != null &&
-                  (entry.at.isBefore(known.at) ||
-                      (entry.at == known.at && entry.seq <= known.seq))) {
-                continue;
-              }
-              if (entry.box.length > maxBox) continue;
-              final message = await keys.open(entry.box, entry.participant);
-              if (generation != _generation) return;
-              final shared = message == null
-                  ? null
-                  : Shared.fromMessage(message);
-              // A damaged entry leaves the last good one in place.
-              if (shared == null) continue;
-              final heard = Companion(
-                participant: entry.participant,
-                heardAt: entry.at.subtract(room.clockOffset),
-                shared: shared,
-              );
-              final still = _still.putIfAbsent(
-                entry.participant,
-                Stillness.new,
-              );
-              final fix = shared.fix;
-              final positionAt = heard.positionAt;
-              final stillSince =
-                  fix != null &&
-                      positionAt != null &&
-                      shared.phase == JourneyPhase.recording
-                  ? still.update(fix, positionAt)
-                  : null;
-              _heard[entry.participant] = (
-                seq: entry.seq,
-                at: entry.at,
-                companion: Companion(
-                  participant: entry.participant,
-                  heardAt: heard.heardAt,
-                  shared: shared,
-                  stillSince: stillSince,
-                ),
-              );
-            }
-            final present = {
-              for (final e in entries)
-                if (!_forgotten.contains(e.participant)) e.participant,
-            };
-            _heard.removeWhere(
-              (participant, _) => !present.contains(participant),
-            );
-            final companions = [for (final h in _heard.values) h.companion]
-              ..sort((a, b) => b.heardAt.compareTo(a.heardAt));
-            if (generation == _generation) {
-              _set(heard: true, companions: companions);
-            }
+            // Snapshots can arrive faster than they are opened: keep only
+            // the newest and read them strictly one after another, so a
+            // slow decrypt can never put an older position back.
+            _waiting = entries;
+            unawaited(_read(generation, keys, me, room));
           }, onError: (Object _) {}),
         );
       _ticker = Timer.periodic(tick, (_) => unawaited(_tell()));
@@ -275,6 +247,127 @@ class GroupSync {
       }
     }
   }
+
+  Future<void> _read(
+    int generation,
+    GroupKeys keys,
+    String me,
+    RelayRoom room,
+  ) async {
+    if (_reading) return;
+    _reading = true;
+    try {
+      while (generation == _generation) {
+        final entries = _waiting;
+        if (entries == null) break;
+        _waiting = null;
+        await _ingest(entries, generation, keys, me, room);
+      }
+    } finally {
+      if (generation == _generation) _reading = false;
+    }
+  }
+
+  Future<void> _ingest(
+    List<RelayEntry> entries,
+    int generation,
+    GroupKeys keys,
+    String me,
+    RelayRoom room,
+  ) async {
+    final silentSince = _clock().subtract(expireAfter);
+    for (final entry in entries) {
+      if (entry.participant == me) continue;
+      // Silent for over a day: gone from the group (G7). Its entries are
+      // removed for everyone, once.
+      if (entry.at.subtract(room.clockOffset).isBefore(silentSince)) {
+        if (_forgotten.add(entry.participant)) {
+          unawaited(room.forget(entry.participant).catchError((Object _) {}));
+        }
+        continue;
+      }
+      // Duplicates and anything older than what is shown change nothing
+      // (invariant 9). The relay's times are not authenticated, so this
+      // only saves work; the sealed order below decides.
+      final known = _heard[entry.participant];
+      if (known != null &&
+          (entry.at.isBefore(known.at) ||
+              (entry.at == known.at && entry.seq <= known.seq))) {
+        continue;
+      }
+      if (entry.box.length > maxBox) continue;
+      final message = await keys.open(entry.box, entry.participant);
+      if (generation != _generation) return;
+      final shared = message == null ? null : Shared.fromMessage(message);
+      // A damaged entry leaves the last good one in place.
+      if (message == null || shared == null) continue;
+      final order = _Order.of(message);
+      if (!order.follows(_order[entry.participant])) continue;
+      _order[entry.participant] = order;
+      final heard = Companion(
+        participant: entry.participant,
+        heardAt: entry.at.subtract(room.clockOffset),
+        shared: shared,
+      );
+      final still = _still.putIfAbsent(entry.participant, Stillness.new);
+      final fix = shared.fix;
+      final positionAt = heard.positionAt;
+      final stillSince =
+          fix != null &&
+              positionAt != null &&
+              shared.phase == JourneyPhase.recording
+          ? still.update(fix, positionAt)
+          : null;
+      _heard[entry.participant] = (
+        seq: entry.seq,
+        at: entry.at,
+        companion: Companion(
+          participant: entry.participant,
+          heardAt: heard.heardAt,
+          shared: shared,
+          stillSince: stillSince,
+          hasMineFrom: _receiptIn(message, me),
+        ),
+      );
+    }
+    final present = {
+      for (final e in entries)
+        if (!_forgotten.contains(e.participant)) e.participant,
+    };
+    _heard.removeWhere((participant, _) => !present.contains(participant));
+    _order.removeWhere((participant, _) => !present.contains(participant));
+    final companions = [for (final h in _heard.values) h.companion]
+      ..sort((a, b) => b.heardAt.compareTo(a.heardAt));
+    if (generation == _generation) _set(heard: true, companions: companions);
+  }
+
+  /// Receipts are keyed by the first characters of a member's id and of
+  /// their session: enough to tell members apart, short enough to fit.
+  static String _short(String id) => id.length <= 8 ? id : id.substring(0, 8);
+
+  /// What a companion says they have of this phone's, if it is from this
+  /// run: when this phone sent it.
+  DateTime? _receiptIn(Map<String, Object?> message, String me) {
+    if (message['r'] case final Map<String, Object?> receipts) {
+      if (receipts[_short(me)] case [
+        final String session,
+        final int counter,
+      ] when session == _session.substring(0, 4)) {
+        return _sentAt[counter];
+      }
+    }
+    return null;
+  }
+
+  /// The newest of each companion's messages this phone has accepted, as
+  /// receipts for them (at most 12, to stay well inside a box).
+  Map<String, Object?> get _receipts => {
+    for (final MapEntry(key: participant, value: order) in _order.entries.take(
+      12,
+    ))
+      if (order.session case final session?)
+        _short(participant): [session.substring(0, 4), order.counter],
+  };
 
   /// Tells the group [_mine] if the policy says so; one at a time.
   Future<void> _tell({bool force = false}) async {
@@ -295,12 +388,27 @@ class GroupSync {
     }
     final telling = () async {
       try {
-        final box = await keys.seal(mine.toMessage(at: now), me);
+        final counter = ++_counter;
+        final message = {
+          ...mine.toMessage(at: now),
+          'q': [_session, counter],
+          't': now.millisecondsSinceEpoch ~/ 1000,
+        };
+        final receipts = _receipts;
+        var box = await keys.seal({
+          ...message,
+          'r': ?receipts.isEmpty ? null : receipts,
+        }, me);
+        // Receipts are a courtesy: never at the cost of the position.
+        if (box.length > maxBox) box = await keys.seal(message, me);
         if (generation != _generation) return;
         await room.publish(++_seq, box);
         if (generation != _generation) return;
+        _sentAt[counter] = now;
+        _sentAt.removeWhere((c, _) => c <= counter - 64);
         _told = mine;
         _toldAt = now;
+        _set(sentAt: now);
         if (_refusals > 0) {
           _refusals = 0;
           _set(refused: false);
@@ -330,6 +438,7 @@ class GroupSync {
         phase: JourneyPhase.ended,
         mode: mine.mode,
         fix: mine.fix,
+        fixArrivedAt: mine.fixArrivedAt,
       );
       await _tell(
         force: true,
@@ -338,17 +447,22 @@ class GroupSync {
     await stop();
   }
 
-  /// Leaves the group: this phone's entries go; the group goes on.
-  Future<void> leave() async {
+  /// Leaves the group: this phone's entries go; the group goes on. Returns
+  /// the room whose entries the relay has not confirmed removing (offline,
+  /// say), to be removed at the next connection; null when it has.
+  Future<String?> leave() async {
+    final (room, keys) = (_room, _keys);
+    var removed = false;
     try {
-      await _room?.leave().timeout(
-        const Duration(milliseconds: 350),
-        onTimeout: () {},
-      );
+      if (room != null) {
+        await room.leave().timeout(const Duration(seconds: 2));
+        removed = true;
+      }
     } on Object {
-      // Offline: the entries stay until the relay forgets them (G7).
+      // Offline or slow: removed later (see return).
     }
     await stop();
+    return removed ? null : keys?.room;
   }
 
   void _set({
@@ -359,6 +473,7 @@ class GroupSync {
     List<Companion>? companions,
     DateTime? offlineSince,
     bool clearOffline = false,
+    DateTime? sentAt,
   }) {
     final now = status.value ?? const GroupStatus();
     status.value = GroupStatus(
@@ -369,6 +484,7 @@ class GroupSync {
       companions: companions ?? now.companions,
       problem: now.problem,
       offlineSince: clearOffline ? null : offlineSince ?? now.offlineSince,
+      sentAt: sentAt ?? now.sentAt,
     );
   }
 
@@ -414,6 +530,9 @@ class GroupSync {
     _telling = null;
     _refusals = 0;
     _heard.clear();
+    _order.clear();
+    _waiting = null;
+    _reading = false;
     _still.clear();
     _forgotten.clear();
     _connected = false;
@@ -430,5 +549,51 @@ class GroupSync {
         ]);
       }
     }
+  }
+}
+
+/// Where a companion's message stands in their own sequence, from inside the
+/// sealed box: the relay cannot change it.
+class _Order {
+  const _Order(this.session, this.counter, this.sentAt);
+
+  /// Null for a message from a version without sessions.
+  final String? session;
+  final int counter;
+
+  /// The sender's clock when it was sent.
+  final DateTime? sentAt;
+
+  static _Order of(Map<String, Object?> message) {
+    final sent = switch (message['t']) {
+      final int seconds => DateTime.fromMillisecondsSinceEpoch(
+        seconds * 1000,
+        isUtc: true,
+      ),
+      _ => null,
+    };
+    if (message['q'] case [
+      final String session,
+      final int counter,
+    ] when session.isNotEmpty && counter > 0) {
+      return _Order(session, counter, sent);
+    }
+    return _Order(null, 0, sent);
+  }
+
+  /// Whether this message is newer than [prior], the last accepted one. In
+  /// one session the counter decides. A new session must be sent later by
+  /// the sender's own clock, so a replayed old box is refused; a sender
+  /// whose clock is set back waits until it passes its last send time.
+  /// Once a sender has used sessions, a message without one is refused, so
+  /// an old-version box cannot be replayed past them.
+  bool follows(_Order? prior) {
+    if (prior == null) return true;
+    final session = this.session;
+    if (session == null) return prior.session == null;
+    if (prior.session == null) return true;
+    if (session == prior.session) return counter > prior.counter;
+    final (now, before) = (sentAt, prior.sentAt);
+    return now != null && (before == null || now.isAfter(before));
   }
 }

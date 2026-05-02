@@ -112,6 +112,8 @@ Future<Widget> _openHome(ValueNotifier<bool> highSun) async {
           store,
           relay,
           now: DateTime.now().toUtc(),
+          pendingRooms: settings.pendingLeaves,
+          onRoomLeft: settings.removePendingLeave,
           shouldContinue: () =>
               recorder.state is Recording &&
               group.status.value?.suspended != true,
