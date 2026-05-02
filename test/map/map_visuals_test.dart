@@ -182,10 +182,48 @@ void main() {
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       await tester.tap(find.byTooltip('Map symbols'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('GPS uncertainty'));
+      // The guide shows every symbol in place; a tap says what one means.
+      await tester.tap(find.bySemanticsLabel(RegExp('^GPS uncertainty')));
       await tester.pumpAndSettle();
+      expect(find.text('GPS uncertainty'), findsOneWidget);
+      expect(find.textContaining('reported accuracy'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel(RegExp('^Planned way')));
+      await tester.pumpAndSettle();
+      expect(find.text('GPS uncertainty'), findsNothing);
       expect(tester.takeException(), isNull);
       semantics.dispose();
     },
   );
+
+  testWidgets('map guide names every symbol in place at normal text size', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: trippingLook(Look.light),
+        home: const Scaffold(body: MapKeyButton()),
+      ),
+    );
+    await tester.tap(find.byTooltip('Map symbols'));
+    await tester.pumpAndSettle();
+    for (final name in [
+      'Start',
+      'Finish',
+      'Destination',
+      'Marked here',
+      'Planned point',
+      'Your track',
+      'Direction only',
+      'GPS uncertainty',
+    ]) {
+      expect(find.text(name), findsOneWidget, reason: name);
+    }
+    // The selected part is named twice: in the scene and on its card.
+    expect(find.text('Planned way'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
 }

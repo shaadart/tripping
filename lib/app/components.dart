@@ -123,3 +123,43 @@ class StatusNote extends StatelessWidget {
     );
   }
 }
+
+/// Springs its child whenever [trigger] changes: a reply to a choice, never
+/// ambient. No motion at all when the system asks for none.
+class Pop extends StatefulWidget {
+  const Pop({super.key, required this.trigger, required this.child});
+  final Object trigger;
+  final Widget child;
+  @override
+  State<Pop> createState() => _PopState();
+}
+
+class _PopState extends State<Pop> with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(vsync: this, value: 1);
+  late final _scale = Tween(
+    begin: .8,
+    end: 1.0,
+  ).chain(CurveTween(curve: Curves.elasticOut)).animate(_controller);
+
+  @override
+  void didUpdateWidget(Pop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.trigger != widget.trigger) {
+      _controller.duration = Motion.of(
+        context,
+        const Duration(milliseconds: 420),
+      );
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ScaleTransition(scale: _scale, child: widget.child);
+}

@@ -946,7 +946,10 @@ class _RecordScreenState extends State<RecordScreen>
                               onSelected: (value) {
                                 switch (value) {
                                   case 'key':
-                                    showMapKey(context);
+                                    showMapKey(
+                                      context,
+                                      identity: widget.settings?.identity.value,
+                                    );
                                   case 'offline':
                                     final builder = widget.offlineMapsBuilder;
                                     if (builder != null) _open(builder);

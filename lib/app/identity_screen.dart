@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../group/identity.dart';
 import 'components.dart';
 import 'identity_marker.dart';
+import 'map_ground.dart';
 import 'settings.dart';
 import 'theme.dart';
 import 'tokens.dart';
@@ -119,7 +120,7 @@ class _IdentityScreenState extends State<IdentityScreen> {
                       children: [
                         _MapSpecimen(
                           identity: _identity,
-                          look: _look(context),
+                          look: groundLook(context),
                           height: (MediaQuery.sizeOf(context).height * .34)
                               .clamp(200.0, 340.0),
                         ),
@@ -284,43 +285,6 @@ class _VisualChoice extends StatelessWidget {
   );
 }
 
-/// The map's own ground colours, so the preview shows the marker where it
-/// will live. Values follow tool/map_styles.dart.
-class _MapGround {
-  const _MapGround({
-    required this.land,
-    required this.park,
-    required this.water,
-    required this.road,
-    required this.casing,
-    required this.minor,
-  });
-  final Color land, park, water, road, casing, minor;
-
-  static const light = _MapGround(
-    land: Color(0xFFF8F8F3),
-    park: Color(0xFFE8EFDE),
-    water: Color(0xFFD1E6EC),
-    road: Color(0xFFFFFFFF),
-    casing: Color(0xFFE2DFD3),
-    minor: Color(0xFFECEAE0),
-  );
-  static const dark = _MapGround(
-    land: Color(0xFF141E20),
-    park: Color(0xFF1D3026),
-    water: Color(0xFF183743),
-    road: Color(0xFF2C3C3F),
-    casing: Color(0xFF0E1618),
-    minor: Color(0xFF1F2C2F),
-  );
-}
-
-Look _look(BuildContext context) {
-  final theme = Theme.of(context);
-  return theme.extension<TrippingLook>()?.look ??
-      (theme.brightness == Brightness.dark ? Look.dark : Look.light);
-}
-
 /// You, as the map will draw you: your accuracy ring, your marker at a size
 /// you can enjoy, and two neighbours at the size they really are.
 class _MapSpecimen extends StatelessWidget {
@@ -335,7 +299,7 @@ class _MapSpecimen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ground = look == Look.dark ? _MapGround.dark : _MapGround.light;
+    final ground = MapGround.of(look);
     final mine = Color(identity.colour.argb);
     final colours = [
       for (final c in IdentityColour.values)
@@ -369,7 +333,7 @@ class _MapSpecimen extends StatelessWidget {
           children: [
             Positioned.fill(
               child: ExcludeSemantics(
-                child: CustomPaint(painter: _MapPainter(ground)),
+                child: CustomPaint(painter: MapGroundPainter(ground)),
               ),
             ),
             ExcludeSemantics(
@@ -389,7 +353,7 @@ class _MapSpecimen extends StatelessWidget {
             ),
             neighbour('Asha', 0, const Alignment(-.72, -.5)),
             neighbour('Tom', 1, const Alignment(.74, .46)),
-            _Pop(
+            Pop(
               trigger: (identity.colour, identity.shape),
               child: IdentityMarker(identity: identity, size: 96),
             ),
@@ -398,101 +362,6 @@ class _MapSpecimen extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Springs its child whenever [trigger] changes: a reply to a choice, never
-/// ambient. No motion at all when the system asks for none.
-class _Pop extends StatefulWidget {
-  const _Pop({required this.trigger, required this.child});
-  final Object trigger;
-  final Widget child;
-  @override
-  State<_Pop> createState() => _PopState();
-}
-
-class _PopState extends State<_Pop> with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(vsync: this, value: 1);
-  late final _scale = Tween(
-    begin: .8,
-    end: 1.0,
-  ).chain(CurveTween(curve: Curves.elasticOut)).animate(_controller);
-
-  @override
-  void didUpdateWidget(_Pop old) {
-    super.didUpdateWidget(old);
-    if (old.trigger != widget.trigger) {
-      _controller.duration = Motion.of(
-        context,
-        const Duration(milliseconds: 420),
-      );
-      _controller.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      ScaleTransition(scale: _scale, child: widget.child);
-}
-
-/// A few blocks of park, a river and crossing streets, drawn to the card.
-class _MapPainter extends CustomPainter {
-  const _MapPainter(this.ground);
-  final _MapGround ground;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    Paint fill(Color c) => Paint()..color = c;
-    Paint line(Color c, double width) => Paint()
-      ..color = c
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = width
-      ..strokeCap = StrokeCap.round;
-    canvas.drawRect(Offset.zero & size, fill(ground.land));
-    for (final r in [
-      Rect.fromLTRB(w * .04, h * .08, w * .36, h * .44),
-      Rect.fromLTRB(w * .66, h * .6, w * 1.04, h * 1.06),
-    ]) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(r, const Radius.circular(28)),
-        fill(ground.park),
-      );
-    }
-    canvas.drawPath(
-      Path()
-        ..moveTo(-w * .05, h * .8)
-        ..cubicTo(w * .3, h * 1.0, w * .5, h * .58, w * 1.05, h * .74),
-      line(ground.water, 26),
-    );
-    for (final y in [.2, .62]) {
-      canvas.drawLine(
-        Offset(0, h * y),
-        Offset(w, h * (y + .06)),
-        line(ground.minor, 4),
-      );
-    }
-    final main = Path()
-      ..moveTo(-w * .05, h * .34)
-      ..cubicTo(w * .35, h * .2, w * .6, h * .5, w * 1.05, h * .34);
-    final cross = Path()
-      ..moveTo(w * .54, -h * .05)
-      ..quadraticBezierTo(w * .44, h * .5, w * .6, h * 1.05);
-    for (final path in [main, cross]) {
-      canvas.drawPath(path, line(ground.casing, 15));
-    }
-    for (final path in [main, cross]) {
-      canvas.drawPath(path, line(ground.road, 11));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_MapPainter old) => old.ground != ground;
 }
 
 class IdentityGate extends StatelessWidget {

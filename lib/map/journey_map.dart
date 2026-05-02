@@ -98,6 +98,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   Fix? _originDrawn;
   List<(double, double)> _plannedPoints = const [];
   (double, double)? _destinationPoint;
+  bool _rested = false;
   static const _waypointSource = 'waypoints';
   static const _routeSource = 'route';
   static const _destinationSource = 'destination';
@@ -268,6 +269,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
         await _moveCamera(map, CameraUpdate.tiltTo(0));
       }
     }
+    if (journey != null) _rested = true;
+    if (journey == null) await _restAtLastPlace(map);
 
     if (state is Recording) {
       if (state.progress.openSince != _segmentStart) {
@@ -289,6 +292,27 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
 
     await _drawPosition(map, state);
     await _checkBlank(map);
+  }
+
+  /// On opening, with nothing to show, the map rests where the last journey
+  /// ended instead of on the whole world. Read from the store: no GPS, and
+  /// only once, so a later journey's end keeps the view the user left.
+  Future<void> _restAtLastPlace(MapLibreMapController map) async {
+    if (_rested) return;
+    _rested = true;
+    if (_track.lastFix != null) return;
+    for (final journey in (await widget.store.endedJourneys()).take(3)) {
+      final segments = await widget.store.track(journey.id);
+      final fix = segments.lastWhere((s) => s.isNotEmpty, orElse: () => []);
+      if (fix.isEmpty) continue;
+      await map.moveCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(fix.last.latitude, fix.last.longitude),
+          11,
+        ),
+      );
+      return;
+    }
   }
 
   Future<void> _drawHistory(MapLibreMapController map) =>
@@ -766,6 +790,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // With no journey there is nothing to follow.
+    final following = _follow && widget.state is! Idle;
     return Stack(
       children: [
         // A drag on the map means the user wants to look around: stop
@@ -844,18 +870,25 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
                   ),
                 ),
                 Semantics(
-                  selected: _follow,
+                  selected: following,
                   child: IconButton(
                     onPressed: _recenter,
                     tooltip: 'Follow my position',
                     icon: Icon(
-                      _follow
+                      following
                           ? Icons.my_location_rounded
                           : Icons.location_searching_rounded,
                     ),
-                    color: _follow
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurface,
+                    // Following is shown by form: filled while it holds,
+                    // plain once the map has been let go.
+                    style: IconButton.styleFrom(
+                      backgroundColor: following
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.transparent,
+                      foregroundColor: following
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Theme.of(context).colorScheme.onSurface,
+                    ),
                     constraints: const BoxConstraints(
                       minWidth: 48,
                       minHeight: 48,
