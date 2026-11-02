@@ -104,11 +104,7 @@ map means? Open the map guide and tap it.
   <img src="docs/images/map-guide.png" width="250" alt="The map guide: a small map showing the planned way, your track with a gap, a direction-only line, start, finish, marked and planned points, a destination pin and the GPS uncertainty around your marker; a card below explains the selected one.">
 </p>
 
-Search and new routes need internet. Tripping cannot contact emergency
-services.
 
-<sub>Screens come from a test build with fictional people and simulated
-positions at public places.</sub>
 
 <details>
 <summary><strong>Build and development</strong></summary>
