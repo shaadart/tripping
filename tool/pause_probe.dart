@@ -128,14 +128,14 @@ Future<void> main() async {
   final documents = await getApplicationDocumentsDirectory();
   final store = JourneyStore.file(File('${documents.path}/journeys.sqlite'));
   final settings = await Settings.open(File('${documents.path}/settings.json'));
-  await settings.setName('Zoya');
+  await settings.setName('Shaad');
   final location = ProbeLocation();
   final recorder = await Recorder.open(store, location);
   // Only the isolated probe's new recording gets a fictional test group.
   recorder.changes.listen((state) async {
     if (state is Recording &&
         await store.membershipOf(state.journey.id) == null) {
-      final invite = Invite.create(state.journey.uuid, 'Zoya');
+      final invite = Invite.create(state.journey.uuid, 'Shaad');
       // For the computer peer only: an emulator-only, fictional test group.
       await File(
         '${documents.path}/probe_invite.txt',

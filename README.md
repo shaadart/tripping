@@ -26,7 +26,7 @@ everyone’s map, so you can tell the group apart at a glance, even in a
 crowd of dots.
 
 <p align="center">
-  <img src="docs/images/identity.png" width="250" alt="The welcome screen: a marker with the initials ZK on a small map with two other people nearby, a name field, six colour tiles and four shape tiles, and a Let’s go button in the chosen colour.">
+  <img src="docs/images/identity.png" width="250" alt="The welcome screen: a marker with the initial S on a small map with two other people nearby, a name field, six colour tiles and four shape tiles, and a Let’s go button in the chosen colour.">
 </p>
 
 ## Give everyone room to travel

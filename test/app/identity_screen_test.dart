@@ -35,7 +35,7 @@ void main() {
           ),
         ),
       );
-      await tester.enterText(find.byType(TextField), 'Zoya Khan');
+      await tester.enterText(find.byType(TextField), 'Shaad');
       await tester.tap(find.byTooltip('River'));
       await tester.ensureVisible(find.byTooltip('Rounded square'));
       await tester.tap(find.byTooltip('Rounded square'));
@@ -53,7 +53,7 @@ void main() {
         () => Settings.open(File('${dir.path}/settings.json')),
       );
       expect(again!.identityReady, isTrue);
-      expect(again.identity.value.description, 'Zoya Khan, River, Gate');
+      expect(again.identity.value.description, 'Shaad, River, Gate');
     },
   );
 

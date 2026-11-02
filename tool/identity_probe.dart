@@ -91,7 +91,7 @@ Future<void> main() async {
         textScale.value = 1;
       case 'companions':
         final journey = (recorder.state as Recording).journey;
-        final invite = Invite.create(journey.uuid, 'Zoya');
+        final invite = Invite.create(journey.uuid, 'Shaad');
         if (await store.membershipOf(journey.id) == null) {
           await store.saveMembership(
             journey.id,
