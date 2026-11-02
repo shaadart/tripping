@@ -631,8 +631,8 @@ class _RecordScreenState extends State<RecordScreen>
     if (unconfirmed != null) {
       await widget.settings?.addPendingLeave(unconfirmed);
       _tell(
-        'Left the group. Your last position is removed from it as soon as '
-        'Tripping is online.',
+        'Left the group. Your last position is removed from it the next '
+        'time Tripping connects to a group.',
       );
     }
     await store.deleteMembership(membership.journeyId);
