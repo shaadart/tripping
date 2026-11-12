@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 import '../journey/journey.dart';
 import '../recording/recorder.dart';
+import 'brand_mark.dart';
 import 'components.dart';
 import 'format.dart';
 import 'theme.dart';
@@ -16,31 +17,31 @@ class Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (label, icon, color, description) = switch (state) {
-      Idle() => (
-        'Tripping',
-        Icons.explore_outlined,
-        scheme.onSurface,
-        'Tripping',
-      ),
+    final (label, leading, description) = switch (state) {
+      Idle() => ('Tripping', const BrandMark(size: 22), 'Tripping'),
       Recording(:final journey) => (
         'Recording',
-        journey.mode == JourneyMode.road
-            ? Icons.directions_car_rounded
-            : Icons.terrain_rounded,
-        scheme.primary,
+        Icon(
+          journey.mode == JourneyMode.road
+              ? Icons.directions_car_rounded
+              : Icons.terrain_rounded,
+          size: 20,
+          color: scheme.primary,
+        ),
         'Recording · ${modeName(journey.mode)}',
       ),
       Paused(:final journey) => (
         'Paused',
-        Icons.pause_rounded,
-        scheme.onSurfaceVariant,
+        Icon(Icons.pause_rounded, size: 20, color: scheme.onSurfaceVariant),
         'Paused · ${modeName(journey.mode)}',
       ),
       Interrupted(:final journey) => (
         'Stopped',
-        Icons.warning_amber_rounded,
-        warningColor(context),
+        Icon(
+          Icons.warning_amber_rounded,
+          size: 20,
+          color: warningColor(context),
+        ),
         'Stopped · ${modeName(journey.mode)}',
       ),
     };
@@ -50,7 +51,7 @@ class Header extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 20, color: color),
+          leading,
           const SizedBox(width: 8),
           Flexible(
             child: Text(
@@ -122,11 +123,19 @@ class Welcome extends StatelessWidget {
   const Welcome({super.key});
 
   @override
-  Widget build(BuildContext context) => Text(
-    'Where to?',
-    style: Theme.of(
-      context,
-    ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) => Row(
+    children: [
+      const ExcludeSemantics(child: BrandMark(size: 28)),
+      const SizedBox(width: Space.sm),
+      Expanded(
+        child: Text(
+          'Where to?',
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ),
+    ],
   );
 }
 
@@ -174,9 +183,7 @@ class ModeCard extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: ExcludeSemantics(
-                    child: CustomPaint(
-                      painter: _ModeArtPainter(art, scheme.primary),
-                    ),
+                    child: CustomPaint(painter: _ModeArtPainter(art, scheme)),
                   ),
                 ),
                 Padding(
@@ -206,49 +213,65 @@ class ModeCard extends StatelessWidget {
   }
 }
 
-/// A route along a road, or contour rings around a summit, drawn faintly in
-/// the corner of the card the way the map will draw them.
+/// The two halves of Tripping's brand mark drawn gently in the corner of each
+/// mode card: the river road corridor + ember S-trail for [ModeArt.road], or
+/// the moss mountain ridge + ember summit trail for [ModeArt.expedition].
 class _ModeArtPainter extends CustomPainter {
-  const _ModeArtPainter(this.art, this.ink);
+  const _ModeArtPainter(this.art, this.scheme);
   final ModeArt art;
-  final Color ink;
+  final ColorScheme scheme;
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
-    Paint stroke(double alpha, double width) => Paint()
-      ..color = ink.withValues(alpha: alpha)
+    Paint stroke(Color c, double alpha, double width) => Paint()
+      ..color = c.withValues(alpha: alpha)
       ..style = PaintingStyle.stroke
       ..strokeWidth = width
-      ..strokeCap = StrokeCap.round;
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
     switch (art) {
       case ModeArt.road:
-        final route = Path()
-          ..moveTo(w * .5, h * .5)
-          ..cubicTo(w * .62, h * .4, w * .6, h * .3, w * .76, h * .22)
-          ..cubicTo(w * .86, h * .16, w * .94, h * .12, w * 1.02, h * .08);
-        canvas.drawPath(route, stroke(.16, 9));
-        canvas.drawPath(route, stroke(.5, 3));
-      case ModeArt.expedition:
-        final centre = Offset(w * .78, h * .3);
-        for (var i = 1; i <= 4; i++) {
-          canvas.drawOval(
-            Rect.fromCenter(
-              center: centre,
-              width: w * .12 * i,
-              height: h * .1 * i,
-            ),
-            stroke(.5 - i * .08, 2),
-          );
-        }
-        canvas.drawCircle(
-          centre,
-          3,
-          Paint()..color = ink.withValues(alpha: .6),
+        final corridor = Path()
+          ..moveTo(w * .48, h * .58)
+          ..cubicTo(w * .64, h * .52, w * .72, h * .24, w * 1.04, h * .14);
+        canvas.drawPath(corridor, stroke(scheme.secondary, .22, 16));
+        canvas.drawLine(
+          Offset(w * .62, h * .48),
+          Offset(w * .70, h * .38),
+          stroke(scheme.surfaceContainerHighest, .75, 2.5),
         );
+        canvas.drawLine(
+          Offset(w * .80, h * .28),
+          Offset(w * .90, h * .20),
+          stroke(scheme.surfaceContainerHighest, .75, 2.5),
+        );
+        final track = Path()
+          ..moveTo(w * .44, h * .46)
+          ..cubicTo(w * .60, h * .48, w * .66, h * .18, w * .98, h * .08);
+        canvas.drawPath(track, stroke(scheme.primary, .55, 4));
+      case ModeArt.expedition:
+        final ridge = Path()
+          ..moveTo(w * .44, h * .58)
+          ..lineTo(w * .62, h * .20)
+          ..quadraticBezierTo(w * .67, h * .10, w * .73, h * .22)
+          ..lineTo(w * .80, h * .34)
+          ..lineTo(w * .87, h * .20)
+          ..quadraticBezierTo(w * .92, h * .12, w * .97, h * .24)
+          ..lineTo(w * 1.06, h * .58)
+          ..close();
+        canvas.drawPath(
+          ridge,
+          Paint()..color = scheme.tertiary.withValues(alpha: .18),
+        );
+        final trail = Path()
+          ..moveTo(w * .52, h * .58)
+          ..cubicTo(w * .62, h * .52, w * .68, h * .28, w * .92, h * .16);
+        canvas.drawPath(trail, stroke(scheme.primary, .55, 4));
     }
   }
 
   @override
-  bool shouldRepaint(_ModeArtPainter old) => old.art != art || old.ink != ink;
+  bool shouldRepaint(_ModeArtPainter old) =>
+      old.art != art || old.scheme != scheme;
 }

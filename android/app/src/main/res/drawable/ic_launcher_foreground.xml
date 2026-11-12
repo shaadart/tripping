@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!-- Scaled into the 72/108 adaptive safe zone with full edge bleed -->
+    <group
+        android:pivotX="128"
+        android:pivotY="128"
+        android:scaleX="0.72"
+        android:scaleY="0.72">
+        <!-- Upper-left Expedition mountain ridge (Palette.moss) -->
+        <path
+            android:fillColor="#3F6B3A"
+            android:pathData="M-60,248 L-60,180 L48,44 Q68,14 92,44 L118,76 L142,48 Q158,28 176,52 L208,96 L104,156 Z" />
+        <!-- Lower-right Road Journey curving highway (Palette.river) -->
+        <path
+            android:fillColor="#0F6E8C"
+            android:pathData="M24,320 C96,226 168,154 320,92 L320,320 Z" />
+        <!-- Highway lane pill dashes (Palette.paper) -->
+        <path
+            android:strokeColor="#F6F1E7"
+            android:strokeWidth="12"
+            android:strokeLineCap="round"
+            android:pathData="M134,242 L164,212 M192,186 L226,158" />
+        <!-- Sandstone figure-ground separation moat -->
+        <path
+            android:strokeColor="#F6F1E7"
+            android:strokeWidth="70"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M-48,252 C28,258 80,198 104,156 C132,104 194,86 312,78" />
+        <!-- Dancing Ember S-curve trail (Palette.ember) -->
+        <path
+            android:strokeColor="#C2410C"
+            android:strokeWidth="42"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M-48,252 C28,258 80,198 104,156 C132,104 194,86 312,78" />
+        <!-- Surfing Navigator Arrow Puck (#10 focal point) -->
+        <group
+            android:translateX="148"
+            android:translateY="122"
+            android:rotation="-34.6">
+            <path
+                android:fillColor="#F6F1E7"
+                android:strokeColor="#F6F1E7"
+                android:strokeWidth="16"
+                android:strokeLineJoin="round"
+                android:pathData="M18,-6 Q32,0 18,6 L-14,20 Q-24,24 -20,12 L-14,0 L-20,-12 Q-24,-24 -14,-20 Z" />
+            <path
+                android:fillColor="#C2410C"
+                android:pathData="M18,-6 Q32,0 18,6 L-14,20 Q-24,24 -20,12 L-14,0 L-20,-12 Q-24,-24 -14,-20 Z" />
+        </group>
+    </group>
+</vector>

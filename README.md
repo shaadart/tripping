@@ -1,6 +1,10 @@
-# Tripping
-
-**Go far. Stay together.**
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/banner.png">
+    <img src="docs/images/banner.png" alt="Tripping — Go far. Stay together." width="100%">
+  </picture>
+</p>
 
 A rider stops for fuel. A car misses a turn. A friend falls behind on the
 trail. Before long, the trip becomes a round of “Where are you?” calls.
