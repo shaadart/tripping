@@ -253,24 +253,30 @@ class _JoinScreenState extends State<JoinScreen> {
         padding: const EdgeInsets.all(Space.gutter),
         children: [
           if (invite == null) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: _JoinTile(
-                    icon: Icons.qr_code_scanner_rounded,
-                    label: 'Scan invite code',
-                    onPressed: _scan,
-                  ),
-                ),
-                const SizedBox(width: Space.md),
-                Expanded(
-                  child: _JoinTile(
-                    icon: Icons.content_paste_rounded,
-                    label: 'Paste invite link',
-                    onPressed: _paste,
-                  ),
-                ),
-              ],
+            Text(
+              'Travel with your group',
+              style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: Space.sm),
+            Text(
+              'Someone already on the trip opens the panel under their map '
+              'and taps Invite companions. Scan the code on their screen, or '
+              'paste the link they send you.',
+              style: text.bodyLarge,
+            ),
+            const SizedBox(height: Space.xl),
+            _JoinTile(
+              icon: Icons.qr_code_scanner_rounded,
+              label: 'Scan invite code',
+              hint: 'Point the camera at their phone',
+              onPressed: _scan,
+            ),
+            const SizedBox(height: Space.md),
+            _JoinTile(
+              icon: Icons.content_paste_rounded,
+              label: 'Paste invite link',
+              hint: 'Copy the whole message first',
+              onPressed: _paste,
             ),
             if (_problem case final problem?)
               Padding(
@@ -335,34 +341,54 @@ class _JoinTile extends StatelessWidget {
   const _JoinTile({
     required this.icon,
     required this.label,
+    required this.hint,
     required this.onPressed,
   });
 
   final IconData icon;
   final String label;
+  final String hint;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
     return MapChrome(
       child: InkWell(
         onTap: onPressed,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 132),
+          constraints: const BoxConstraints(
+            minHeight: Touch.primary + Space.lg,
+          ),
           child: Padding(
             padding: const EdgeInsets.all(Space.lg),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
               children: [
-                Icon(icon, size: 40, color: scheme.primary),
-                const SizedBox(height: Space.sm),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                Icon(icon, size: 32, color: scheme.primary),
+                const SizedBox(width: Space.lg),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: text.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        hint,
+                        style: text.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: scheme.onSurfaceVariant,
                 ),
               ],
             ),

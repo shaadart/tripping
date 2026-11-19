@@ -206,13 +206,15 @@ Future<void> addEndLayers(
     );
   }
   if (!context.mounted) return;
+  // Start and Finish of a short journey sit almost on one point: let each
+  // label move to a free side rather than butt up against the other.
   await _addPlaceLabel(map, context, source, '$source-labels', [
     'match',
     ['get', 'end'],
     'start',
     'Start',
     'Finish',
-  ]);
+  ], spread: true);
 }
 
 /// The pin's tip anchors the destination; its body sits above a recorded
@@ -236,7 +238,10 @@ Future<void> addDestinationLayers(
     ),
   );
   if (!context.mounted) return;
-  await _addPlaceLabel(map, context, source, '$source-label', ['get', 'name']);
+  await _addPlaceLabel(map, context, source, '$source-label', [
+    'get',
+    'name',
+  ], spread: true);
 }
 
 Future<void> _addPlaceLabel(
@@ -246,6 +251,7 @@ Future<void> _addPlaceLabel(
   String layer,
   Object field, {
   double offset = 1.4,
+  bool spread = false,
 }) async {
   final scheme = MapVisuals(context).scheme;
   await map.addSymbolLayer(
@@ -255,8 +261,10 @@ Future<void> _addPlaceLabel(
       textField: field,
       textFont: ['Noto Sans Regular'],
       textSize: lookOf(context).look == Look.highSun ? 14 : 13,
-      textOffset: [0, offset],
-      textAnchor: 'top',
+      textOffset: spread ? null : [0, offset],
+      textAnchor: spread ? null : 'top',
+      textVariableAnchor: spread ? ['top', 'bottom', 'right', 'left'] : null,
+      textRadialOffset: spread ? offset : null,
       textColor: scheme.onSurface.toHexStringRGB(),
       textHaloColor: scheme.surface.toHexStringRGB(),
       textHaloWidth: 1.5,
@@ -339,5 +347,5 @@ Future<void> addWaypointLayers(
   await _addPlaceLabel(map, context, source, '$source-labels', [
     'get',
     'label',
-  ]);
+  ], spread: true);
 }

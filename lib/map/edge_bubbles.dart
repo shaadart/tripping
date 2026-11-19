@@ -49,6 +49,19 @@ class EdgeBubbleView extends StatelessWidget {
     return distanceAndDirection(here, fix);
   }
 
+  /// The shown label: who and how far. No compass letter, since the
+  /// pointer already shows the way and a lone "N" or "S" beside an initial
+  /// reads as a name. The spoken label keeps the direction.
+  String _tag(Companion c) {
+    final here = this.here, fix = c.shared.fix;
+    final first = c.name.trim().split(RegExp(r'\s+')).first;
+    final who = first.characters.length > 8
+        ? '${first.characters.take(7)}…'
+        : first;
+    if (here == null || fix == null) return who;
+    return '$who · ${distanceBetween(here, fix)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -60,7 +73,7 @@ class EdgeBubbleView extends StatelessWidget {
     // At large text the map is short and labels would cover neighbours:
     // the distance stays in the spoken label and the companion panel.
     final roomy = MediaQuery.textScalerOf(context).scale(11) <= 16;
-    final distance = single == null || !roomy ? null : _away(single);
+    final distance = single == null || !roomy ? null : _tag(single);
     return Semantics(
       button: true,
       label: label,

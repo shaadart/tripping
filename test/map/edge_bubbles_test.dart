@@ -74,7 +74,7 @@ void main() {
     var shown = 0;
     await show(tester, [companion('Asha')], onShow: () => shown++);
     expect(find.byType(IdentityMarker), findsOneWidget);
-    expect(find.text('1.2 km N'), findsOneWidget);
+    expect(find.text('Asha · 1.2 km'), findsOneWidget);
     expect(
       find.bySemanticsLabel('Asha, 1.2 km N, off the map. Show them'),
       findsOneWidget,
@@ -124,7 +124,7 @@ void main() {
     await show(tester, [companion('Asha')]);
     await expectComfortable(tester);
     // No room for a label on a short map: the distance is still spoken.
-    expect(find.text('1.2 km N'), findsNothing);
+    expect(find.text('Asha · 1.2 km'), findsNothing);
     expect(
       find.bySemanticsLabel('Asha, 1.2 km N, off the map. Show them'),
       findsOneWidget,

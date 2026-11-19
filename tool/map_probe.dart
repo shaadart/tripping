@@ -207,7 +207,7 @@ Future<void> main() async {
   final settings = await Settings.open(File('${dir.path}/settings.json'));
   await settings.setIdentity(
     const MapIdentity(
-      name: 'Ravi Mehta',
+      name: 'Shaad',
       colour: IdentityColour.river,
       shape: MarkerShape.gate,
     ),

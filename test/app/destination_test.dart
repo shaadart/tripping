@@ -166,8 +166,9 @@ void main() {
     });
     await tester.pump();
     final journey = (recorder.state as Recording).journey.uuid;
+    expect(find.text('Where to?'), findsNothing);
     expect(find.text('Show coordinates'), findsNothing);
-    await tester.tap(find.text('Where to?'));
+    await tester.tap(find.text('Set a destination'));
     await tester.pumpAndSettle();
     expect(find.byType(SearchScreen), findsOneWidget);
     expect((recorder.state as Recording).journey.uuid, journey);

@@ -326,8 +326,15 @@ class _JourneyCard extends StatelessWidget {
                       ),
                       Text(
                         kilometres(past.meters),
+                        // A journey that never moved (reads 0.00 km) stays
+                        // listed, but quiet, so real trips lead the list.
                         style: text.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
+                          fontWeight: past.meters < 5
+                              ? FontWeight.w500
+                              : FontWeight.w800,
+                          color: past.meters < 5
+                              ? scheme.onSurfaceVariant
+                              : null,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),

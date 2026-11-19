@@ -173,5 +173,7 @@ void main() {
     expect(distanceAndDirection(fixAt(0, 0), fixAt(0, -1234)), '1.2 km S');
     expect(distanceAndDirection(fixAt(0, 0), fixAt(0, 15500)), '16 km N');
     expect(distanceAndDirection(fixAt(0, 0), fixAt(0, 999.8)), '1.0 km N');
+    expect(distanceBetween(fixAt(0, 0), fixAt(0, -1234)), '1.2 km');
+    expect(distanceBetween(fixAt(0, 0), fixAt(0, 10)), 'here');
   });
 }

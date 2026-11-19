@@ -31,7 +31,7 @@ class Readout extends StatelessWidget {
     };
     final time = Figure(
       value: clockTime(progress.elapsedAt(now)),
-      label: 'Time',
+      label: 'Recorded time',
     );
     final distance = Figure(
       value: kilometres(progress.meters),
@@ -50,10 +50,14 @@ class Readout extends StatelessWidget {
                 distance,
                 time,
               ],
+              // Same order as a saved journey's detail screen.
               JourneyMode.expedition => [
-                time,
                 distance,
-                Figure(value: clockTime(progress.movingTime), label: 'Moving'),
+                time,
+                Figure(
+                  value: clockTime(progress.movingTime),
+                  label: 'Moving time',
+                ),
               ],
             })
               SizedBox(
