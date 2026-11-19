@@ -7,7 +7,7 @@ over a personal Tripping app. Do not copy private configuration or databases.
 
 The fixture uses the actual RecordScreen, JourneyMap, TrackMap, Settings and
 Recorder with existing store APIs. All points and routes are authored synthetic
-geometry around a public park, and Ravi Mehta / Cedar Camp / Rest stop / Lookout
+geometry around a public park, and Shaad / Cedar Camp / Rest stop / Lookout
 are fictional. A FakeLocation stream and fake system facts replace sensors and
 notification settings; these screens do not establish real GPS, service or
 notification behavior. No Firebase, search, routing service or live group is

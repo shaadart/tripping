@@ -118,6 +118,13 @@ class _IdentityScreenState extends State<IdentityScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        Text(
+                          'How the group sees you',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: Space.md),
                         _MapSpecimen(
                           identity: _identity,
                           look: groundLook(context),
@@ -134,6 +141,9 @@ class _IdentityScreenState extends State<IdentityScreen> {
                           textInputAction: TextInputAction.done,
                           maxLength: MapIdentity.nameLength,
                           decoration: const InputDecoration(
+                            labelText: 'Your name',
+                            floatingLabelAlignment:
+                                FloatingLabelAlignment.center,
                             hintText: 'What do we call you?',
                             counterText: '',
                           ),
@@ -153,6 +163,11 @@ class _IdentityScreenState extends State<IdentityScreen> {
                                   width: (box.maxWidth - 2 * Space.sm) / 3,
                                   height: Touch.primary,
                                   fill: Color(colour.argb),
+                                  // One way to show a choice on this screen:
+                                  // an ink ring, for colours and shapes alike.
+                                  outline: _colour == colour
+                                      ? scheme.onSurface
+                                      : null,
                                   onPressed: _saving
                                       ? null
                                       : () => setState(() => _colour = colour),
@@ -184,7 +199,7 @@ class _IdentityScreenState extends State<IdentityScreen> {
                                         ).withValues(alpha: .13)
                                       : raisedGround(context),
                                   outline: _shape == shape
-                                      ? Color(_colour.argb)
+                                      ? scheme.onSurface
                                       : scheme.outlineVariant,
                                   onPressed: _saving
                                       ? null

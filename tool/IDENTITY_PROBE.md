@@ -11,7 +11,7 @@ probe or location permission are needed: positions are generated at a public
 park, participants are fictional and the relay is in memory. Sharing on a live
 server is not demonstrated by this fixture.
 
-Complete the actual welcome screen, e.g. Ravi Mehta / River / Gate. Use the
+Complete the actual welcome screen, e.g. Shaad / River / Gate. Use the
 person button on the map to reopen the same editor. The scratch receiver takes
 commands through `tripping/pause_probe`:
 

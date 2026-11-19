@@ -161,4 +161,26 @@ void main() {
     await expectComfortable(tester);
     semantics.dispose();
   });
+
+  group('shortDetails', () {
+    test('drops the tail every result shares, keeping the first part', () {
+      expect(
+        shortDetails([
+          'Bengaluru, Bangalore North, Karnataka, India',
+          'Jayanagar, Bengaluru, Bangalore North, Karnataka, India',
+          'Bengaluru, Bangalore North, Karnataka, India',
+        ]),
+        ['Bengaluru', 'Jayanagar', 'Bengaluru'],
+      );
+    });
+
+    test('keeps everything when nothing is shared, or for one result', () {
+      expect(
+        shortDetails(['Mysuru, India', 'Goa, India', 'Kandy, Sri Lanka']),
+        ['Mysuru, India', 'Goa, India', 'Kandy, Sri Lanka'],
+      );
+      expect(shortDetails(['Bengaluru, India']), ['Bengaluru, India']);
+      expect(shortDetails([null, 'Goa, India']), [null, 'Goa, India']);
+    });
+  });
 }

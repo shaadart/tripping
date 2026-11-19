@@ -18,7 +18,7 @@ keep track of one another.
 <p align="center">
   <img src="docs/images/where-to.png" width="250" alt="The start screen: a map above two cards, Road journey and Expedition, each with a small drawing of how it will look on the map.">
   &nbsp;
-  <img src="docs/images/edge-bubbles.png" width="250" alt="An expedition being recorded. Companions off the screen appear as small bubbles on the edges of the map, each with a pointer and a distance such as 1.5 km N; two companions to the north-east share one bubble marked 2.">
+  <img src="docs/images/edge-bubbles.png" width="250" alt="An expedition being recorded. Companions off the screen appear as small bubbles at the edge of the map, each with a pointer and a name and distance such as Asha · 140 m; below the map, the distance, recorded time and moving time, and Pause and End journey.">
   &nbsp;
   <img src="docs/images/history.png" width="250" alt="Past journeys: the total distance at the top, then a card for each journey with its shape drawn on a small piece of map.">
 </p>
@@ -30,7 +30,7 @@ everyone’s map, so you can tell the group apart at a glance, even in a
 crowd of dots.
 
 <p align="center">
-  <img src="docs/images/identity.png" width="250" alt="The welcome screen: a marker with the initial S on a small map with two other people nearby, a name field, six colour tiles and four shape tiles, and a Let’s go button in the chosen colour.">
+  <img src="docs/images/identity.png" width="250" alt="The welcome screen: How the group sees you, a marker with the initial S on a small map with two other people nearby, a Your name field, six colour tiles and four shape tiles, and a Let’s go button in the chosen colour.">
 </p>
 
 ## Give everyone room to travel
@@ -50,9 +50,9 @@ edge of the map points their way and says how far. Several in the same
 direction share one bubble. Tap it to bring them into view.
 
 <p align="center">
-  <img src="docs/images/dark-map.png" width="250" alt="The same expedition at night: a dark map with companion bubbles on all four edges.">
+  <img src="docs/images/dark-map.png" width="250" alt="The same expedition at night: a dark map with companions on the map and two of them as bubbles at the top edge.">
   &nbsp;
-  <img src="docs/images/join.png" width="250" alt="Join a group: two large tiles, Scan invite code and Paste invite link.">
+  <img src="docs/images/join.png" width="250" alt="Join a group: a short line on where an invite comes from, then two rows, Scan invite code and Paste invite link.">
 </p>
 
 Invite friends with a link or QR code. Choose whether to share your location
@@ -91,7 +91,7 @@ along the way. Export the journey as GPX to use it in another app or pass
 the recording to a friend.
 
 <p align="center">
-  <img src="docs/images/journey.png" width="250" alt="One past journey: its track on the map with a start ring and a finish square, and its distance, time and moving time.">
+  <img src="docs/images/journey.png" width="250" alt="One past journey: its track on the map with a start ring and a finish square, and its distance, recorded time and moving time.">
   &nbsp;
   <img src="docs/images/history-dark.png" width="250" alt="Past journeys in the dark look.">
 </p>

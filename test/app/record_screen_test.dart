@@ -142,6 +142,31 @@ void main() {
     await cleanUp(tester);
   });
 
+  testWidgets('at 200% text on a small phone, pause and end stay on screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await show(tester);
+    await tester.ensureVisible(find.text('Road journey'));
+    await tester.pumpAndSettle();
+    await tap(tester, 'Road journey');
+    for (final label in ['Pause', 'End journey']) {
+      final box = tester.getRect(find.text(label));
+      expect(box.bottom, lessThanOrEqualTo(640), reason: label);
+      expect(box.top, greaterThanOrEqualTo(0), reason: label);
+    }
+    // Large text scrolls the figures; the actions never move with them.
+    final before = tester.getRect(find.text('Pause'));
+    await tester.drag(find.text('Distance'), const Offset(0, -200));
+    await tester.pump();
+    expect(tester.getRect(find.text('Pause')), before);
+    await cleanUp(tester);
+  });
+
   testWidgets('with large text, pause and end stack instead', (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 1.6;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -404,7 +429,7 @@ void main() {
       await show(tester);
       await tap(tester, 'Road journey');
       expect(find.text('Speed'), findsOneWidget);
-      expect(find.text('Moving'), findsNothing);
+      expect(find.text('Moving time'), findsNothing);
       expect(find.text('—'), findsOneWidget);
 
       await act(
@@ -433,7 +458,7 @@ void main() {
     ) async {
       await show(tester);
       await tap(tester, 'Expedition');
-      expect(find.text('Moving'), findsOneWidget);
+      expect(find.text('Moving time'), findsOneWidget);
       expect(find.text('Speed'), findsNothing);
       expect(find.text('Show coordinates'), findsNothing);
 

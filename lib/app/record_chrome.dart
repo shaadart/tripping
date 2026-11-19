@@ -74,10 +74,13 @@ class Header extends StatelessWidget {
 /// Two actions side by side, leaving more of the screen to the map; one
 /// above the other when large text would not fit.
 class ActionPair extends StatelessWidget {
-  const ActionPair(this.first, this.second, {super.key});
+  const ActionPair(this.first, this.second, {super.key, this.gap = 12});
 
   final Widget first;
   final Widget second;
+
+  /// Space between the two side by side.
+  final double gap;
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +93,7 @@ class ActionPair extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: first),
-        const SizedBox(width: 12),
+        SizedBox(width: gap),
         Expanded(child: second),
       ],
     );

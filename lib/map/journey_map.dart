@@ -226,7 +226,9 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
           iconImage: ['get', 'marker'],
           iconSize: iconScale,
           iconAllowOverlap: true,
-          iconIgnorePlacement: true,
+          // Always drawn, but counted: place names below move off it
+          // rather than run underneath it.
+          iconIgnorePlacement: false,
           iconPitchAlignment: 'viewport',
           iconRotationAlignment: 'viewport',
         ),
@@ -392,6 +394,7 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
       }
     }
     final turned = _turn(bearing, _bearing) > 10;
+    await _clearOfToolbar(map);
     if (!_zoomedIn) {
       await _moveCamera(map, _followView(fix));
       _zoomedIn = true;
@@ -845,6 +848,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   void _showCompanions(List<Companion> companions) {
     final map = _map;
     if (map == null || !_styleReady) return;
+    // A fit sets the map's padding to its own.
+    _insetTop = null;
     setState(() => _follow = false);
     final top = MediaQuery.paddingOf(context).top + 120;
     _serially(
@@ -891,6 +896,8 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
   void _overview() {
     final map = _map;
     if (map == null || !_styleReady) return;
+    // A fit sets the map's padding to its own.
+    _insetTop = null;
     // Include the pin's body and labels, not just their coordinates. The
     // toolbar and Mark button must not cover either end of the journey.
     final top =
@@ -922,7 +929,26 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
     final fix = _shownFix;
     final map = _map;
     if (fix == null || map == null) return;
-    _serially(() async => _moveCamera(map, _followView(fix)));
+    _serially(() async {
+      await _clearOfToolbar(map);
+      await _moveCamera(map, _followView(fix));
+    });
+  }
+
+  /// The top inset last given to the map; null once a fit has set its own.
+  double? _insetTop;
+
+  /// Moves the followed centre below the toolbar, so your marker is never
+  /// drawn under it, even when large text makes the map short.
+  Future<void> _clearOfToolbar(MapLibreMapController map) async {
+    if (!mounted) return;
+    final top =
+        MediaQuery.paddingOf(context).top +
+        24 +
+        max(48.0, MediaQuery.textScalerOf(context).scale(20) + 24);
+    if (_insetTop == top) return;
+    _insetTop = top;
+    await map.updateContentInsets(EdgeInsets.only(top: top));
   }
 
   @override
@@ -1028,14 +1054,16 @@ class _JourneyMapState extends State<JourneyMap> with WidgetsBindingObserver {
                           ? Icons.my_location_rounded
                           : Icons.location_searching_rounded,
                     ),
-                    // Following is shown by form: filled while it holds,
-                    // plain once the map has been let go.
+                    // Following is shown by form: a tinted disc while it
+                    // holds, plain once the map has been let go. Tinted, not
+                    // solid ember: solid ember is kept for the sheet's one
+                    // main action, so the eye finds Pause first.
                     style: IconButton.styleFrom(
                       backgroundColor: following
-                          ? Theme.of(context).colorScheme.primary
+                          ? Theme.of(context).colorScheme.primaryContainer
                           : Colors.transparent,
                       foregroundColor: following
-                          ? Theme.of(context).colorScheme.onPrimary
+                          ? Theme.of(context).colorScheme.onPrimaryContainer
                           : Theme.of(context).colorScheme.onSurface,
                     ),
                     constraints: const BoxConstraints(

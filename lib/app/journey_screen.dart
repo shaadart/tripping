@@ -186,13 +186,13 @@ class _JourneyScreenState extends State<JourneyScreen> {
                           Expanded(
                             child: Figure(
                               value: clockTime(past.recordedTime),
-                              label: 'Time',
+                              label: 'Recorded time',
                             ),
                           ),
                           Expanded(
                             child: Figure(
                               value: clockTime(past.movingTime),
-                              label: 'Moving',
+                              label: 'Moving time',
                             ),
                           ),
                         ],

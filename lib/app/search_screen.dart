@@ -103,6 +103,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _list(List<Place> places, {bool recent = false}) {
     final text = Theme.of(context).textTheme;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final details = shortDetails([for (final p in places) p.detail]);
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(
         Space.gutter,
@@ -115,6 +116,7 @@ class _SearchScreenState extends State<SearchScreen> {
       itemBuilder: (context, i) {
         final place = places[i];
         final away = _away(place);
+        final detail = details[i];
         return MapChrome(
           child: InkWell(
             onTap: () => Navigator.pop(context, place),
@@ -146,7 +148,7 @@ class _SearchScreenState extends State<SearchScreen> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          if (place.detail case final detail?)
+                          if (detail != null)
                             Text(
                               detail,
                               maxLines: 2,
@@ -335,4 +337,30 @@ class _Note extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Result details without the tail every result shares: five places in
+/// "Bengaluru, Bangalore North, Karnataka, India" read as "Bengaluru" each,
+/// and only what tells them apart stays. A detail always keeps its first
+/// part, and a lone result keeps its whole detail.
+List<String?> shortDetails(List<String?> details) {
+  final parts = [
+    for (final d in details)
+      d?.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList(),
+  ];
+  final present = parts.whereType<List<String>>().toList();
+  if (present.length < 2) return details;
+  var shared = 0;
+  while (true) {
+    final next = shared + 1;
+    if (present.any((p) => p.length < next)) break;
+    final tail = present.first[present.first.length - next];
+    if (present.any((p) => p[p.length - next] != tail)) break;
+    shared = next;
+  }
+  if (shared == 0) return details;
+  return [
+    for (final p in parts)
+      p?.sublist(0, (p.length - shared).clamp(1, p.length)).join(', '),
+  ];
 }

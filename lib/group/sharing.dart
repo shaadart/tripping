@@ -166,12 +166,19 @@ Freshness freshnessOf(Duration age, JourneyMode mode) {
 
 /// "1.2 km NE" from [here] to [there]; "here" within 20 m.
 String distanceAndDirection(Fix here, Fix there) {
+  final distance = distanceBetween(here, there);
+  if (distance == 'here') return distance;
+  return '$distance ${compassPoint(here.bearingTo(there))}';
+}
+
+/// How far [there] is from [here], without a direction: "350 m", "1.2 km",
+/// or "here" within 20 m. For places where a pointer already shows the way.
+String distanceBetween(Fix here, Fix there) {
   final meters = here.metersTo(there);
   if (meters < 20) return 'here';
   // Rounded first, so 999.8 m reads "1.0 km", not "1000 m".
   final tens = (meters / 10).round() * 10;
-  final distance = tens < 1000
+  return tens < 1000
       ? '$tens m'
       : '${(meters / 1000).toStringAsFixed(meters < 9950 ? 1 : 0)} km';
-  return '$distance ${compassPoint(here.bearingTo(there))}';
 }

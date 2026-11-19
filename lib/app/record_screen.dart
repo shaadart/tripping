@@ -1020,282 +1020,309 @@ class _RecordScreenState extends State<RecordScreen>
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.sizeOf(context).height * .6,
                 ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (active)
-                        GestureDetector(
-                          onVerticalDragEnd: (drag) {
-                            final speed = drag.primaryVelocity ?? 0;
-                            if (speed.abs() > 80) {
-                              setState(() => _detailsOpen = speed < 0);
-                            }
-                          },
-                          child: Tooltip(
-                            message: 'Journey details',
-                            child: Semantics(
-                              button: true,
-                              expanded: _detailsOpen,
-                              label: 'Journey details',
-                              child: InkWell(
-                                onTap: _toggleDetails,
-                                child: SizedBox(
-                                  height: 48,
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Container(
-                                        width: 32,
-                                        height: 4,
-                                        decoration: BoxDecoration(
-                                          color: scheme.outlineVariant,
-                                          borderRadius: BorderRadius.circular(
-                                            Space.xs,
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        right: 20,
-                                        child: Icon(
-                                          _detailsOpen
-                                              ? Icons.expand_more_rounded
-                                              : Icons.expand_less_rounded,
-                                          color: scheme.onSurfaceVariant,
-                                          size: 22,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          20,
-                          active ? 0 : 20,
-                          20,
-                          16,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            switch (state) {
-                              Idle() => const Welcome(),
-                              _ => Readout(state: state, now: now),
-                            },
-                            if (active &&
-                                !_detailsOpen &&
-                                _route == null &&
-                                widget.planner != null &&
-                                widget.places != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: OutlinedButton.icon(
-                                  onPressed: _chooseDestination,
-                                  icon: const Icon(Icons.search_rounded),
-                                  label: const Text('Where to?'),
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size.fromHeight(48),
-                                    alignment: Alignment.centerLeft,
-                                  ),
-                                ),
-                              ),
-                            if (active && !_detailsOpen)
-                              if (_route case final route?)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 12),
-                                  child: InkWell(
-                                    onTap: _toggleDetails,
-                                    borderRadius: Corner.smallRadius,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 8,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            route.kind == RouteKind.straight
-                                                ? Icons.near_me_outlined
-                                                : Icons.place_rounded,
-                                            color: scheme.secondary,
-                                            size: 22,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  route.destination,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleSmall
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                      ),
-                                                ),
-                                                Text(
-                                                  _routeCaption(route),
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall
-                                                      ?.copyWith(
-                                                        color:
-                                                            _progress
-                                                                    ?.offRoute ==
-                                                                true
-                                                            ? warningColor(
-                                                                context,
-                                                              )
-                                                            : scheme
-                                                                  .onSurfaceVariant,
-                                                      ),
-                                                ),
-                                              ],
+                // During a journey Pause/End sit below the scrolling part,
+                // so large text can push figures out of view but never the
+                // main action.
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Flexible(
+                      // The last 16 dp fade out, so figures scrolled under
+                      // the actions read as more below, not as a cut.
+                      child: ShaderMask(
+                        blendMode: BlendMode.dstIn,
+                        shaderCallback: (box) => LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: const [Colors.black, Colors.transparent],
+                          stops: [
+                            box.height <= 16 ? 0 : 1 - 16 / box.height,
+                            1,
+                          ],
+                        ).createShader(box),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (active)
+                                GestureDetector(
+                                  onVerticalDragEnd: (drag) {
+                                    final speed = drag.primaryVelocity ?? 0;
+                                    if (speed.abs() > 80) {
+                                      setState(() => _detailsOpen = speed < 0);
+                                    }
+                                  },
+                                  child: Tooltip(
+                                    message: 'Journey details',
+                                    child: Semantics(
+                                      button: true,
+                                      expanded: _detailsOpen,
+                                      label: 'Journey details',
+                                      child: InkWell(
+                                        onTap: _toggleDetails,
+                                        child: SizedBox(
+                                          height: 48,
+                                          child: Center(
+                                            child: Container(
+                                              width: 32,
+                                              height: 4,
+                                              decoration: BoxDecoration(
+                                                color: scheme.outlineVariant,
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                      Space.xs,
+                                                    ),
+                                              ),
                                             ),
                                           ),
-                                          const Icon(
-                                            Icons.chevron_right_rounded,
-                                            size: 20,
-                                          ),
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                            if (!active || _detailsOpen) ...[
-                              if (widget.planner case final planner?
-                                  when widget.places != null)
-                                switch (state) {
-                                  Idle() => ValueListenableBuilder(
-                                    valueListenable: planner.pending,
-                                    builder: (context, pending, _) =>
-                                        NextDestination(
-                                          pending: pending,
-                                          onSearch: _chooseDestination,
-                                          onClear: () =>
-                                              planner.pending.value = null,
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  20,
+                                  active ? 0 : 20,
+                                  20,
+                                  16,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    switch (state) {
+                                      Idle() => const Welcome(),
+                                      _ => Readout(state: state, now: now),
+                                    },
+                                    // Collapsed, a moving journey shows only what a glance
+                                    // needs: the figures, the destination or one quiet way to
+                                    // set one, the status and Pause/End. Companions and the
+                                    // rest live in the open sheet.
+                                    if (active &&
+                                        !_detailsOpen &&
+                                        _route == null &&
+                                        widget.planner != null &&
+                                        widget.places != null)
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: TextButton.icon(
+                                          onPressed: _chooseDestination,
+                                          icon: const Icon(
+                                            Icons.search_rounded,
+                                            size: 20,
+                                          ),
+                                          label: const Text(
+                                            'Set a destination',
+                                          ),
                                         ),
-                                  ),
-                                  _ => DestinationLine(
-                                    mode: switch (state) {
-                                      Recording(:final journey) ||
-                                      Paused(:final journey) ||
-                                      Interrupted(
-                                        :final journey,
-                                      ) => journey.mode,
-                                      Idle() => JourneyMode.road,
-                                    },
-                                    route: _route,
-                                    why: _routeWhy,
-                                    planning: _planning,
-                                    progress: _progress,
-                                    now: now,
-                                    here: _compassFix(state, now),
-                                    heading: _heading,
-                                    onSearch: _chooseDestination,
-                                    onClear: () {
-                                      final journey = _routeJourney;
-                                      if (journey != null) {
-                                        unawaited(planner.clear(journey));
-                                      }
-                                    },
-                                    onRetry: () => _replan(asked: true),
-                                  ),
-                                },
-                              if (_groups && state is! Idle)
-                                GroupLine(
-                                  membership: _membership,
-                                  paused: state is! Recording,
-                                  sharingPaused: switch (state) {
-                                    Recording(:final journey) =>
-                                      widget.settings?.sharingPaused(
-                                            journey.uuid,
-                                          ) ??
-                                          false,
-                                    _ => false,
-                                  },
-                                  onToggleSharing: state is Recording
-                                      ? _toggleSharing
-                                      : null,
-                                  status: widget.group?.status,
-                                  now: now,
-                                  here: switch (state) {
-                                    Recording(:final latestFix?) => latestFix,
-                                    Recording(:final progress) ||
-                                    Paused(:final progress) ||
-                                    Interrupted(
-                                      :final progress,
-                                    ) => progress.lastFix,
-                                    Idle() => null,
-                                  },
-                                  onLeave: _leaveGroup,
-                                  convoy: _convoyFor(state, _route),
-                                  onInvite: _invite,
-                                  onJoin: _join,
-                                ),
+                                      ),
+                                    if (active && !_detailsOpen)
+                                      if (_route case final route?)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 12,
+                                          ),
+                                          child: InkWell(
+                                            onTap: _toggleDetails,
+                                            borderRadius: Corner.smallRadius,
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 8,
+                                                  ),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    route.kind ==
+                                                            RouteKind.straight
+                                                        ? Icons.near_me_outlined
+                                                        : Icons.place_rounded,
+                                                    color: scheme.secondary,
+                                                    size: 22,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                          route.destination,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .titleSmall
+                                                              ?.copyWith(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                              ),
+                                                        ),
+                                                        Text(
+                                                          _routeCaption(route),
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .bodySmall
+                                                              ?.copyWith(
+                                                                color:
+                                                                    _progress
+                                                                            ?.offRoute ==
+                                                                        true
+                                                                    ? warningColor(
+                                                                        context,
+                                                                      )
+                                                                    : scheme
+                                                                          .onSurfaceVariant,
+                                                              ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const Icon(
+                                                    Icons.chevron_right_rounded,
+                                                    size: 20,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    if (!active || _detailsOpen) ...[
+                                      if (widget.planner case final planner?
+                                          when widget.places != null)
+                                        switch (state) {
+                                          Idle() => ValueListenableBuilder(
+                                            valueListenable: planner.pending,
+                                            builder: (context, pending, _) =>
+                                                NextDestination(
+                                                  pending: pending,
+                                                  onSearch: _chooseDestination,
+                                                  onClear: () =>
+                                                      planner.pending.value =
+                                                          null,
+                                                ),
+                                          ),
+                                          _ => DestinationLine(
+                                            mode: switch (state) {
+                                              Recording(:final journey) ||
+                                              Paused(:final journey) ||
+                                              Interrupted(
+                                                :final journey,
+                                              ) => journey.mode,
+                                              Idle() => JourneyMode.road,
+                                            },
+                                            route: _route,
+                                            why: _routeWhy,
+                                            planning: _planning,
+                                            progress: _progress,
+                                            now: now,
+                                            here: _compassFix(state, now),
+                                            heading: _heading,
+                                            onSearch: _chooseDestination,
+                                            onClear: () {
+                                              final journey = _routeJourney;
+                                              if (journey != null) {
+                                                unawaited(
+                                                  planner.clear(journey),
+                                                );
+                                              }
+                                            },
+                                            onRetry: () => _replan(asked: true),
+                                          ),
+                                        },
+                                      if (_groups && state is! Idle)
+                                        GroupLine(
+                                          membership: _membership,
+                                          paused: state is! Recording,
+                                          sharingPaused: switch (state) {
+                                            Recording(:final journey) =>
+                                              widget.settings?.sharingPaused(
+                                                    journey.uuid,
+                                                  ) ??
+                                                  false,
+                                            _ => false,
+                                          },
+                                          onToggleSharing: state is Recording
+                                              ? _toggleSharing
+                                              : null,
+                                          status: widget.group?.status,
+                                          now: now,
+                                          here: switch (state) {
+                                            Recording(:final latestFix?) =>
+                                              latestFix,
+                                            Recording(:final progress) ||
+                                            Paused(:final progress) ||
+                                            Interrupted(
+                                              :final progress,
+                                            ) => progress.lastFix,
+                                            Idle() => null,
+                                          },
+                                          onLeave: _leaveGroup,
+                                          convoy: _convoyFor(state, _route),
+                                          onInvite: _invite,
+                                          onJoin: _join,
+                                        ),
 
-                              if (widget.savedOffline case final saved?)
-                                SavedHere(state: state, saved: saved),
-                              Coordinates(state: state, now: now),
-                            ],
-                            if (active && !_detailsOpen && _groups)
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: TextButton.icon(
-                                  onPressed: _toggleDetails,
-                                  icon: const Icon(
-                                    Icons.people_outline_rounded,
-                                    size: 20,
-                                  ),
-                                  label: Text(
-                                    state is Recording
-                                        ? 'Companions'
-                                        : 'Companions · sharing paused',
-                                  ),
+                                      if (widget.savedOffline case final saved?)
+                                        SavedHere(state: state, saved: saved),
+                                      Coordinates(state: state, now: now),
+                                    ],
+                                    const SizedBox(height: 10),
+                                    StatusLine(
+                                      state: state,
+                                      now: now,
+                                      exits: _exits,
+                                      compact: active && !_detailsOpen,
+                                      onOpenLocationSettings: () =>
+                                          widget.location.openSettingsFor(
+                                            LocationAccess.serviceOff,
+                                          ),
+                                      onOpenAppSettings:
+                                          widget.system.openAppSettings,
+                                    ),
+                                    SystemNotes(
+                                      state: state,
+                                      restricted: _restricted,
+                                      notificationsShown: _notificationsShown,
+                                      onOpenAppSettings:
+                                          widget.system.openAppSettings,
+                                    ),
+                                    if (_refused case final problem?)
+                                      AccessProblem(
+                                        problem: problem,
+                                        onRetry: _retry == null
+                                            ? null
+                                            : () => _askFor(_retry!),
+                                        onOpenSettings: () => widget.location
+                                            .openSettingsFor(problem),
+                                      ),
+                                    if (!active) ...[
+                                      const SizedBox(height: 12),
+                                      ..._actions(state),
+                                    ],
+                                  ],
                                 ),
                               ),
-                            const SizedBox(height: 10),
-                            StatusLine(
-                              state: state,
-                              now: now,
-                              exits: _exits,
-                              compact: active && !_detailsOpen,
-                              onOpenLocationSettings: () => widget.location
-                                  .openSettingsFor(LocationAccess.serviceOff),
-                              onOpenAppSettings: widget.system.openAppSettings,
-                            ),
-                            SystemNotes(
-                              state: state,
-                              restricted: _restricted,
-                              notificationsShown: _notificationsShown,
-                              onOpenAppSettings: widget.system.openAppSettings,
-                            ),
-                            if (_refused case final problem?)
-                              AccessProblem(
-                                problem: problem,
-                                onRetry: _retry == null
-                                    ? null
-                                    : () => _askFor(_retry!),
-                                onOpenSettings: () =>
-                                    widget.location.openSettingsFor(problem),
-                              ),
-                            const SizedBox(height: 12),
-                            ..._actions(state),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    if (active)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: _actions(state),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1364,6 +1391,8 @@ class _RecordScreenState extends State<RecordScreen>
             onPressed: enabled ? _end : null,
             child: const Text('End journey'),
           ),
+          // Wide, so a gloved tap at the main action does not land on End.
+          gap: Space.xl,
         ),
       ],
       Paused() || Interrupted() => [
@@ -1377,6 +1406,8 @@ class _RecordScreenState extends State<RecordScreen>
             onPressed: enabled ? _end : null,
             child: const Text('End journey'),
           ),
+          // Wide, so a gloved tap at the main action does not land on End.
+          gap: Space.xl,
         ),
       ],
     };
